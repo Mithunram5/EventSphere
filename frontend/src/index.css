@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #f0f9ff;
+  --color-brand-100: #e0f2fe;
+  --color-brand-200: #bae6fd;
+  --color-brand-300: #7dd3fc;
+  --color-brand-400: #38bdf8;
+  --color-brand-500: #0ea5e9;
+  --color-brand-600: #0284c7;
+  --color-brand-700: #0369a1;
+  --color-brand-800: #075985;
+  --color-brand-900: #0c4a6e;
+  --color-brand-950: #030712;
+
+  --color-accent-50: #faf5ff;
+  --color-accent-100: #f3e8ff;
+  --color-accent-500: #a855f7;
+  --color-accent-600: #9333ea;
+  --color-accent-700: #7e22ce;
+
+  --color-darkbg: #0f172a;
+  --color-darkcard: #1e293b;
+  --color-darkborder: #334155;
+
+  --font-sans: "Outfit", "Inter", "system-ui", "sans-serif";
+}
+
+/* Custom Base Styles */
+body {
+  @apply font-sans bg-slate-50 text-slate-900 transition-colors duration-300;
+}
+
+body.dark {
+  @apply bg-slate-950 text-slate-100;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-slate-100 dark:bg-slate-900;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 dark:bg-slate-700 rounded-full hover:bg-slate-400 dark:hover:bg-slate-600;
+}
+
+/* Custom animations and effects */
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dark .glass-card {
+  background: rgba(30, 41, 59, 0.6);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-brand-500 to-accent-600;
+}
+
+.gradient-bg {
+  @apply bg-gradient-to-r from-brand-500 to-accent-600;
+}
+
+.gradient-btn {
+  @apply bg-gradient-to-r from-brand-600 to-accent-600 hover:from-brand-500 hover:to-accent-500 text-white font-semibold transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 active:translate-y-0;
+}
+
+/* Glow effects */
+.glow-effect {
+  box-shadow: 0 0 15px rgba(14, 165, 233, 0.15);
+}
+
+.dark .glow-effect {
+  box-shadow: 0 0 25px rgba(168, 85, 247, 0.08);
+}
