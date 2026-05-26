@@ -33,6 +33,14 @@ const userSchema = new mongoose.Schema(
     bio: {
       type: String,
       default: '',
+    },
+    shareLinkedIn: {
+      type: Boolean,
+      default: false,
+    },
+    linkedinUrl: {
+      type: String,
+      default: '',
     }
   },
   {

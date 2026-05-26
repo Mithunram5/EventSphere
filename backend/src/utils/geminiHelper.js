@@ -115,8 +115,60 @@ Return a JSON array of session objects in the optimized order, containing sessio
   }));
 };
 
+/**
+ * AI Event Chatbot Assistant
+ */
+const chatWithEventAI = async (event, question) => {
+  const eventDetails = `
+Title: ${event.title}
+Category: ${event.category}
+Venue: ${event.venue}
+City: ${event.city}
+Date & Time: ${event.dateTime}
+Description: ${event.description}
+Schedule: ${JSON.stringify(event.schedule || [])}
+Ticket Tiers: ${JSON.stringify(event.ticketTypes || [])}
+  `;
+
+  const prompt = `You are a helpful and polite event digital assistant for the event "${event.title}".
+Here is the detailed context of the event:
+${eventDetails}
+
+Please answer the attendee's question about the event in a friendly, precise, and concise manner (maximum 3 sentences).
+If the answer cannot be found in the details above, politely say that the organizer has not released those details yet. Do not hallucinate or make up facts.
+
+Attendee Question: "${question}"
+Response:`;
+
+  if (genAI) {
+    try {
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      return text.trim();
+    } catch (error) {
+      console.error('Gemini API Error in chatWithEventAI:', error);
+    }
+  }
+
+  // Fallback simulator
+  const q = question.toLowerCase();
+  if (q.includes('ticket') || q.includes('price') || q.includes('cost') || q.includes('free') || q.includes('paid')) {
+    const summary = event.ticketTypes.map(t => `${t.name}: ₹${t.price}`).join(', ');
+    return `The ticket rates for "${event.title}" are: ${summary}. You can purchase them on the booking sidebar.`;
+  }
+  if (q.includes('when') || q.includes('date') || q.includes('time') || q.includes('schedule')) {
+    return `The event is scheduled for ${new Date(event.dateTime).toLocaleString()}. Check out the "Event Schedule Sessions" timeline on the details page.`;
+  }
+  if (q.includes('where') || q.includes('venue') || q.includes('location') || q.includes('online')) {
+    return `The event is held physically at ${event.venue} in ${event.city}.`;
+  }
+  return `Welcome! "${event.title}" features high-impact sessions and professional networking opportunities. Is there anything specific about the venue, schedules, or pricing I can clarify for you?`;
+};
+
 module.exports = {
   generateAIDescription,
   recommendEvents,
   optimizeSchedule,
+  chatWithEventAI,
 };

@@ -17,6 +17,40 @@ const TicketDashboard = () => {
   const [aiSchedule, setAiSchedule] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
 
+  // Feedback states
+  const [selectedEventForFeedback, setSelectedEventForFeedback] = useState(null);
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+
+  const handleFeedbackSubmit = async (e) => {
+    e.preventDefault();
+    if (!feedbackComment.trim()) {
+      toast.error('Feedback comment cannot be empty!');
+      return;
+    }
+
+    setFeedbackSubmitting(true);
+    try {
+      const res = await api.post('/reviews', {
+        eventId: selectedEventForFeedback._id,
+        rating: feedbackRating,
+        comment: feedbackComment
+      });
+
+      if (res.data.success) {
+        toast.success('Thank you! Your feedback has been recorded.');
+        setSelectedEventForFeedback(null);
+        setFeedbackComment('');
+        setFeedbackRating(5);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to submit feedback.');
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+
   const fetchMyTickets = async () => {
     try {
       setLoading(true);
@@ -274,6 +308,15 @@ const TicketDashboard = () => {
                     </>
                   )}
 
+                  {new Date(ticket.event.dateTime) < new Date() && ticket.status === 'active' && (
+                    <button
+                      onClick={() => setSelectedEventForFeedback(ticket.event)}
+                      className="text-xs font-semibold px-4 py-2 border border-emerald-250 hover:bg-emerald-50/20 text-emerald-600 dark:border-emerald-800 dark:text-emerald-400 rounded-xl"
+                    >
+                      📝 Post Feedback
+                    </button>
+                  )}
+
                   {isRefundable && (
                     <button
                       onClick={() => handleRequestRefund(ticket._id)}
@@ -381,6 +424,67 @@ const TicketDashboard = () => {
               </div>
             )}
           </div>
+        )}
+      </Modal>
+      {/* Modal 3: Post Event Feedback Form */}
+      <Modal
+        isOpen={!!selectedEventForFeedback}
+        onClose={() => setSelectedEventForFeedback(null)}
+        title="Leave Event Feedback"
+      >
+        {selectedEventForFeedback && (
+          <form onSubmit={handleFeedbackSubmit} className="space-y-4">
+            <div>
+              <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">Event</h4>
+              <p className="text-sm font-bold text-slate-800 dark:text-white">{selectedEventForFeedback.title}</p>
+            </div>
+            
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+                Rating
+              </label>
+              <div className="flex gap-1.5 text-slate-350 dark:text-slate-700 text-2xl">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setFeedbackRating(star)}
+                    className={`transition-colors hover:text-amber-400 ${
+                      star <= feedbackRating ? 'text-amber-400' : ''
+                    }`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">
+                Comments & Suggestions
+              </label>
+              <textarea
+                rows={3}
+                placeholder="How was your overall experience at this event? Let us know."
+                value={feedbackComment}
+                onChange={(e) => setFeedbackComment(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-xs text-slate-850 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={feedbackSubmitting}
+              className="gradient-btn w-full rounded-xl py-3 text-xs font-bold shadow flex items-center justify-center gap-1.5"
+            >
+              {feedbackSubmitting ? (
+                <span className="h-4.5 w-4.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : (
+                'Submit Feedback Form'
+              )}
+            </button>
+          </form>
         )}
       </Modal>
     </div>

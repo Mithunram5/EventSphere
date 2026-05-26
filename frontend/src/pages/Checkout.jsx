@@ -12,13 +12,28 @@ const Checkout = () => {
   const eventId = searchParams.get('eventId');
   const ticketTypeName = searchParams.get('ticketType');
   const quantity = parseInt(searchParams.get('quantity')) || 1;
+  const itemsParam = searchParams.get('items');
 
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
+  // Parse items
+  let selectedItems = [];
+  if (itemsParam) {
+    selectedItems = itemsParam
+      .split(',')
+      .map((part) => {
+        const [name, qty] = part.split(':');
+        return { ticketTypeName: decodeURIComponent(name), quantity: parseInt(qty) || 0 };
+      })
+      .filter((i) => i.quantity > 0);
+  } else if (ticketTypeName) {
+    selectedItems = [{ ticketTypeName, quantity }];
+  }
+
   useEffect(() => {
-    if (!eventId || !ticketTypeName) {
+    if (!eventId || selectedItems.length === 0) {
       toast.error('Invalid checkout request.');
       navigate('/events');
       return;
@@ -40,7 +55,7 @@ const Checkout = () => {
     };
 
     fetchEvent();
-  }, [eventId, ticketTypeName, navigate]);
+  }, [eventId, navigate]);
 
   if (loading) {
     return (
@@ -65,8 +80,28 @@ const Checkout = () => {
     );
   }
 
-  const ticketObj = event.ticketTypes.find((t) => t.name === ticketTypeName);
-  if (!ticketObj) {
+  // Calculate pricing breakdown
+  let ticketSubtotal = 0;
+  let itemsDetail = [];
+  let invalidItem = false;
+
+  for (const item of selectedItems) {
+    const ticketObj = event.ticketTypes.find((t) => t.name === item.ticketTypeName);
+    if (!ticketObj) {
+      invalidItem = true;
+      break;
+    }
+    const itemTotal = ticketObj.price * item.quantity;
+    ticketSubtotal += itemTotal;
+    itemsDetail.push({
+      name: item.ticketTypeName,
+      quantity: item.quantity,
+      price: ticketObj.price,
+      total: itemTotal,
+    });
+  }
+
+  if (invalidItem || itemsDetail.length === 0) {
     return (
       <div className="text-center py-20 bg-slate-50 dark:bg-slate-950 h-[80vh] flex flex-col justify-center items-center">
         <p className="text-slate-800 dark:text-white font-bold">Invalid ticket category selected.</p>
@@ -77,9 +112,7 @@ const Checkout = () => {
     );
   }
 
-  // Calculate pricing breakdown
-  const ticketSubtotal = ticketObj.price * quantity;
-  const convenienceFee = ticketSubtotal > 0 ? 40 : 0; // ₹40 flat for paid tickets
+  const convenienceFee = ticketSubtotal > 0 ? 40 : 0; // ₹40 flat convenience charge for paid orders
   const gstAmount = ticketSubtotal > 0 ? parseFloat((ticketSubtotal * 0.18).toFixed(2)) : 0; // 18% GST
   const totalAmount = ticketSubtotal + convenienceFee + gstAmount;
 
@@ -89,8 +122,7 @@ const Checkout = () => {
       // 1. Create order on the backend
       const orderRes = await api.post('/bookings/order', {
         eventId,
-        ticketTypeName,
-        quantity,
+        items: selectedItems,
       });
 
       if (!orderRes.data.success) {
@@ -105,8 +137,7 @@ const Checkout = () => {
       if (isFree) {
         const verifyRes = await api.post('/bookings/verify', {
           eventId,
-          ticketTypeName,
-          quantity,
+          items: selectedItems,
           razorpayOrderId: orderId,
           isFree: true,
         });
@@ -128,8 +159,7 @@ const Checkout = () => {
           try {
             const verifyRes = await api.post('/bookings/verify', {
               eventId,
-              ticketTypeName,
-              quantity,
+              items: selectedItems,
               razorpayOrderId: orderId,
               razorpayPaymentId: `pay_mock_${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
               razorpaySignature: `sig_mock_${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
@@ -152,7 +182,6 @@ const Checkout = () => {
       }
 
       // Scenario C: Real Razorpay Sandbox Modal Checkout
-      // Options format required by checkout.js SDK
       const options = {
         key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
         amount: totalAmount * 100, // in paisa
@@ -163,11 +192,9 @@ const Checkout = () => {
         order_id: orderId,
         handler: async function (response) {
           try {
-            // Verify payment signature on backend
             const verifyRes = await api.post('/bookings/verify', {
               eventId,
-              ticketTypeName,
-              quantity,
+              items: selectedItems,
               razorpayOrderId: response.razorpay_order_id,
               razorpayPaymentId: response.razorpay_payment_id,
               razorpaySignature: response.razorpay_signature,
@@ -190,7 +217,7 @@ const Checkout = () => {
           email: user?.email || '',
         },
         theme: {
-          color: '#0ea5e9', // Sky blue brand color
+          color: '#0ea5e9',
         },
         modal: {
           ondismiss: function () {
@@ -212,13 +239,13 @@ const Checkout = () => {
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8 font-sans pb-20">
       <h1 className="text-3xl font-extrabold text-slate-800 dark:text-white mb-6">Booking checkout</h1>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Left Column: Event summary details */}
         <div className="md:col-span-2 space-y-6">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4 transition-colors duration-200">
             <h3 className="text-md font-bold text-slate-800 dark:text-white">Review Event Details</h3>
-            
+
             <div className="flex gap-4">
               <img
                 src={event.bannerImage.startsWith('http') ? event.bannerImage : `http://localhost:5000${event.bannerImage}`}
@@ -235,17 +262,36 @@ const Checkout = () => {
                 </span>
                 <h4 className="font-bold text-sm text-slate-800 dark:text-white mt-1 leading-snug">{event.title}</h4>
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold">
-                  {new Date(event.dateTime).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(event.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(event.dateTime).toLocaleDateString(undefined, {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}{' '}
+                  at{' '}
+                  {new Date(event.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
             </div>
-            
+
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800/60 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
               <svg className="h-4.5 w-4.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                />
               </svg>
-              <span>{event.venue}, {event.city}</span>
+              <span>
+                {event.ruleOnline ? 'Online Event' : `${event.venue}, ${event.city}`}
+              </span>
             </div>
           </div>
 
@@ -269,15 +315,17 @@ const Checkout = () => {
         <div className="md:col-span-1">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-6 transition-colors duration-200">
             <h3 className="text-md font-bold text-slate-800 dark:text-white">Order Summary</h3>
-            
+
             <div className="space-y-3.5 text-xs">
-              <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                <span>
-                  {ticketTypeName} x {quantity}
-                </span>
-                <span className="font-semibold text-slate-800 dark:text-white">₹{ticketSubtotal}</span>
-              </div>
-              
+              {itemsDetail.map((item, idx) => (
+                <div key={idx} className="flex justify-between text-slate-600 dark:text-slate-400">
+                  <span>
+                    {item.name} x {item.quantity}
+                  </span>
+                  <span className="font-semibold text-slate-800 dark:text-white">₹{item.total}</span>
+                </div>
+              ))}
+
               {ticketSubtotal > 0 && (
                 <>
                   <div className="flex justify-between text-slate-600 dark:text-slate-400">
@@ -310,7 +358,7 @@ const Checkout = () => {
                 'Pay Now with Razorpay'
               )}
             </button>
-            
+
             {ticketSubtotal > 0 && (
               <p className="text-[9px] text-center text-slate-400 dark:text-slate-500 font-semibold">
                 By booking, you agree to our refund terms. Refund claims can be filed directly from the ticket dashboard.

@@ -45,6 +45,8 @@ const registerUser = async (req, res, next) => {
           role: user.role,
           bio: user.bio,
           profileImage: user.profileImage,
+          shareLinkedIn: user.shareLinkedIn,
+          linkedinUrl: user.linkedinUrl,
         },
       });
     } else {
@@ -86,6 +88,8 @@ const loginUser = async (req, res, next) => {
         role: user.role,
         bio: user.bio,
         profileImage: user.profileImage,
+        shareLinkedIn: user.shareLinkedIn,
+        linkedinUrl: user.linkedinUrl,
       },
     });
   } catch (error) {
@@ -112,6 +116,8 @@ const getUserProfile = async (req, res, next) => {
           role: user.role,
           bio: user.bio,
           profileImage: user.profileImage,
+          shareLinkedIn: user.shareLinkedIn,
+          linkedinUrl: user.linkedinUrl,
         },
       });
     } else {
@@ -135,6 +141,8 @@ const updateUserProfile = async (req, res, next) => {
       user.name = req.body.name || user.name;
       user.bio = req.body.bio !== undefined ? req.body.bio : user.bio;
       user.profileImage = req.body.profileImage || user.profileImage;
+      user.shareLinkedIn = req.body.shareLinkedIn !== undefined ? req.body.shareLinkedIn : user.shareLinkedIn;
+      user.linkedinUrl = req.body.linkedinUrl !== undefined ? req.body.linkedinUrl : user.linkedinUrl;
 
       if (req.body.password) {
         user.password = req.body.password;
@@ -151,6 +159,8 @@ const updateUserProfile = async (req, res, next) => {
           role: updatedUser.role,
           bio: updatedUser.bio,
           profileImage: updatedUser.profileImage,
+          shareLinkedIn: updatedUser.shareLinkedIn,
+          linkedinUrl: updatedUser.linkedinUrl,
         },
       });
     } else {

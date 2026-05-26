@@ -103,8 +103,42 @@ const getAIOptimizedSchedule = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Ask AI Assistant about a specific event
+ * @route   POST /api/ai/ask-assistant
+ * @access  Public
+ */
+const askEventAssistant = async (req, res, next) => {
+  try {
+    const { eventId, question } = req.body;
+
+    if (!eventId || !question || !question.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide both eventId and question',
+      });
+    }
+
+    const event = await Event.findById(eventId);
+    if (!event) {
+      return res.status(404).json({ success: false, message: 'Event not found' });
+    }
+
+    const { chatWithEventAI } = require('../utils/geminiHelper');
+    const answer = await chatWithEventAI(event, question);
+
+    res.status(200).json({
+      success: true,
+      answer,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getAIDescription,
   getAIRecommendations,
   getAIOptimizedSchedule,
+  askEventAssistant,
 };

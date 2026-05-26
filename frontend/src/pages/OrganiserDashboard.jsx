@@ -37,6 +37,36 @@ const OrganiserDashboard = () => {
   const [aiBulletPoints, setAiBulletPoints] = useState('');
   const [aiGenerating, setAiGenerating] = useState(false);
 
+  // Payout states
+  const [payoutInProgress, setPayoutInProgress] = useState(false);
+  const [payoutsList, setPayoutsList] = useState([
+    { id: 'PAY-897', date: '2026-05-10', amount: 8400, status: 'Completed' },
+    { id: 'PAY-432', date: '2026-04-15', amount: 3200, status: 'Completed' }
+  ]);
+
+  const handlePayoutTrigger = () => {
+    const amount = (stats.totalRevenue * 0.90).toFixed(2);
+    if (parseFloat(amount) <= 0) {
+      toast.error('Payout balance is too low to process.');
+      return;
+    }
+    
+    setPayoutInProgress(true);
+    toast.loading('Simulating bank settlement transfer...', { id: 'payout-sim' });
+
+    setTimeout(() => {
+      const newPayout = {
+        id: `PAY-${Math.floor(100 + Math.random() * 900)}`,
+        date: new Date().toISOString().slice(0, 10),
+        amount: parseFloat(amount),
+        status: 'Completed'
+      };
+      setPayoutsList(prev => [newPayout, ...prev]);
+      setPayoutInProgress(false);
+      toast.success(`Success! Payout settlement of ₹${amount} completed.`, { id: 'payout-sim' });
+    }, 2000);
+  };
+
   // Create/Edit Event Form Fields
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -531,6 +561,57 @@ const OrganiserDashboard = () => {
                 )}
               </button>
             </form>
+          </div>
+
+          {/* Payout Settlement Simulation Panel */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4 transition-colors duration-200">
+            <div>
+              <h3 className="text-md font-bold text-slate-800 dark:text-white">Organiser Payout Desk</h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold mt-0.5">Simulate bank settlements</p>
+            </div>
+            
+            <div className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3 border border-slate-100 dark:border-slate-800/40 text-xs space-y-1.5 font-sans">
+              <div className="flex justify-between text-slate-500 dark:text-slate-400">
+                <span>Gross Earnings:</span>
+                <span className="font-semibold text-slate-800 dark:text-white">₹{stats.totalRevenue}</span>
+              </div>
+              <div className="flex justify-between text-slate-500 dark:text-slate-400">
+                <span>Platform Commission (10%):</span>
+                <span className="font-semibold text-slate-800 dark:text-white">₹{(stats.totalRevenue * 0.10).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between font-bold text-slate-800 dark:text-white text-sm pt-1.5 border-t border-slate-200 dark:border-slate-800">
+                <span>Net Settlable Payout:</span>
+                <span>₹{(stats.totalRevenue * 0.90).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={payoutInProgress || stats.totalRevenue === 0}
+              onClick={handlePayoutTrigger}
+              className="gradient-btn w-full rounded-xl py-3 text-xs font-bold shadow flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {payoutInProgress ? (
+                <span className="h-4.5 w-4.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : (
+                'Trigger Payout Settlement'
+              )}
+            </button>
+            
+            {/* Historical settlements list */}
+            {payoutsList.length > 0 && (
+              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Settlement History</p>
+                <div className="space-y-1.5">
+                  {payoutsList.map(p => (
+                    <div key={p.id} className="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-400">
+                      <span>{p.date} • {p.id}</span>
+                      <span className="font-bold text-slate-800 dark:text-white">₹{p.amount.toFixed(2)} ({p.status})</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 # 🌌 EventSphere — End-to-End Event Management & Ticketing Platform
 
-EventSphere is a professional-grade, hackathon-ready event management and ticketing platform designed for **Attendees**, **Organisers**, and **Admins**. It features dynamic event discovery, real-time ticket checkout with **Razorpay (real-time test mode + sandbox fallback)**, secure QR-code ticket generation/validation, manual and digital check-ins, and three distinct AI workflows powered by the **Google Gemini API** (recommendations, description writer, and schedule organizer).
+EventSphere is a professional-grade, high-fidelity event management and ticketing platform designed for **Attendees**, **Organisers**, and **Admins**. It features dynamic event discovery, real-time ticket checkout with **Razorpay (real-time test mode + sandbox fallback)**, secure QR-code ticket generation/validation, manual and digital check-ins, professional networking directories, organiser payout simulation desk, and four distinct AI workflows powered by the **Google Gemini API** (recommendations, description writer, schedule optimizer, and event assistant chatbot).
 
 ---
 
@@ -9,7 +9,7 @@ EventSphere is a professional-grade, hackathon-ready event management and ticket
 ### Frontend
 - **Framework:** React.js (Vite configuration)
 - **Routing:** React Router DOM (with protected route guards based on user roles)
-- **Styling:** Tailwind CSS v4 (with premium dark mode support and custom fonts)
+- **Styling:** Tailwind CSS v4 (with premium dark mode support and custom Outfit/Inter fonts)
 - **State Management:** React Context API (`AuthContext` for auth/profile, `ThemeContext` for light/dark mode)
 - **Charts:** Recharts (for clean administrative dashboard analytics)
 - **QR Codes:** `qrcode.react` (for dynamic browser-side ticket generation)
@@ -38,7 +38,7 @@ EventSphere/
 │   │   ├── middleware/      # Auth validator, role checker, global error handlers
 │   │   ├── models/          # User, Event, Booking, Review, Notification models
 │   │   ├── routes/          # Express API route endpoints
-│   │   ├── utils/           # Gemini AI helpers and QR utility
+│   │   ├── utils/           # Gemini AI helpers, QR utility, Database Seeder
 │   │   └── server.js        # Backend entry point (Port 5000)
 │   ├── package.json
 │   └── .env
@@ -59,19 +59,25 @@ EventSphere/
 ## 🎨 Feature Walkthrough
 
 ### 1. User Roles & Dashboards
-- **Attendee:** Can search/filter events, manage a personal wishlist, RSVP to free events or purchase paid tickets, view QR codes, and generate an AI-optimized event schedule/itinerary.
-- **Organiser:** Can create new events, write rich event copy using the **AI description writer**, view real-time registrations, export attendees to CSV, approve refund requests, and process check-ins via manual ticket code verification.
+- **Attendee:** Can search/filter events, manage a personal wishlist, RSVP to free events or purchase paid tickets, view QR codes, network with other attendees, ask the AI assistant questions, and generate an AI-optimized event schedule/itinerary.
+- **Organiser:** Can create new events, write rich event copy using the **AI description writer**, view real-time registrations, export attendees to CSV, process refund requests, simulate payouts, and process check-ins via manual ticket code verification.
 - **Admin:** Monitors global stats (registrations, revenue, user signups), modifies user roles (promotes to organiser/admin), and bans accounts.
 
 ### 2. Payments & Booking Flows
+- Multi-ticket checkout allowing booking different ticket types (e.g. VIP and General) in one transaction.
 - Dynamic ticket pricing with convenience fees and GST calculations.
 - Integrated **Razorpay SDK payment modal** for test cards.
 - **Sandbox Fallback:** If Razorpay API keys are missing in `.env`, the system automatically runs a secure simulation of a mock transaction, completing registration and issuing tickets instantly.
 
 ### 3. Google Gemini AI Workflows
+- **Smart AI Event Assistant:** Instant Q&A chatbot located directly on the event details page to answer queries regarding venue, schedule, or pricing categories.
 - **AI Event Description Writer:** Generates cohesive descriptions for organisers using a bullet point list input.
 - **AI Recommendation Engine:** Analyzes viewed categories and past registrations to recommend similar events.
 - **AI Schedule Planner:** Sorts event schedule lists and optimizes speaker time blocks dynamically.
+
+### 4. Community & Collaboration
+- **Attendee Networking:** Opt-in to share your LinkedIn with other attendees of the same event in a clean professional networking panel.
+- **Post-event Feedback:** Seamlessly rate and review past events from the Ticket Dashboard which populate the public event page.
 
 ---
 
@@ -136,7 +142,7 @@ To run the full stack locally:
 cd backend
 npm run dev
 ```
-*The server will start on [http://localhost:5000](http://localhost:5000) with nodemon.*
+*The server will start on [http://localhost:5000](http://localhost:5000) with nodemon, and automatically seed sample data if the DB is empty.*
 
 ### Start the Frontend
 ```bash
@@ -150,29 +156,31 @@ npm run dev
 ## 🔌 API Documentation
 
 ### Auth Module (`/api/auth`)
-- `POST /register` - Registers a new user (`attendee` or `organiser`).
+- `POST /register` - Registers a new user.
 - `POST /login` - Issues a JWT token on successful login.
 - `GET /profile` - Fetches profile details of the authorized user.
-- `PUT /profile` - Updates user metadata and wishlist items.
+- `PUT /profile` - Updates user metadata, wishlist, and networking configurations.
 
 ### Events Module (`/api/events`)
 - `GET /` - Fetches all events with query filters (city, category, dates, search).
 - `GET /:id` - Fetches full details of a specific event.
-- `POST /` - Creates a new event (Organisers and Admins only).
+- `POST /` - Creates a new event.
 - `PUT /:id` - Modifies event details.
 - `DELETE /:id` - Deletes event.
 - `POST /upload` - Uploads custom banners (multipart handler).
 
 ### Bookings Module (`/api/bookings`)
-- `POST /order` - Standard order initialization.
+- `POST /order` - Standard multi-ticket order initialization.
 - `POST /verify` - Confirms Razorpay signatures and generates attendee tickets.
 - `GET /user` - Lists bookings registered to the attendee.
-- `GET /event/:eventId` - Lists all registrations for an organiser's event.
-- `POST /refund/:bookingId` - Submits a refund claim.
-- `POST /refund-action/:bookingId` - Allows organisers to approve/reject claims.
+- `GET /event/:eventId/attendees` - Lists all registrations for an organiser's event.
+- `GET /event/:eventId/networking` - Lists opted-in attendee networking profiles.
+- `POST /ticket/:ticketId/refund-request` - Submits a refund claim.
+- `PUT /ticket/:ticketId/refund-process` - Allows organisers to approve/reject claims.
 - `POST /checkin` - Validates ticket ID codes.
 
 ### AI Module (`/api/ai`)
+- `POST /ask-assistant` - Real-time event Q&A chatbot assistant.
 - `POST /generate-description` - Invokes Gemini to turn event bullet points into copy paragraphs.
 - `GET /recommendations` - Lists user recommendations.
 - `POST /optimize-schedule` - Re-arranges event itinerary plans.

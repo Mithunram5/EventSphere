@@ -35,29 +35,42 @@ if (hasRazorpayKeys) {
  */
 const createOrder = async (req, res, next) => {
   try {
-    const { eventId, ticketTypeName, quantity } = req.body;
-    const qty = parseInt(quantity) || 1;
-
+    const { eventId, ticketTypeName, quantity, items } = req.body;
     const event = await Event.findById(eventId);
     if (!event) {
       return res.status(404).json({ success: false, message: 'Event not found' });
     }
 
-    // Find ticket type
-    const ticketType = event.ticketTypes.find((t) => t.name === ticketTypeName);
-    if (!ticketType) {
-      return res.status(400).json({ success: false, message: 'Invalid ticket type' });
+    let purchaseItems = [];
+    if (items && Array.isArray(items) && items.length > 0) {
+      purchaseItems = items.map(item => ({
+        ticketTypeName: item.ticketTypeName,
+        quantity: parseInt(item.quantity) || 1
+      }));
+    } else if (ticketTypeName) {
+      purchaseItems = [{
+        ticketTypeName,
+        quantity: parseInt(quantity) || 1
+      }];
+    } else {
+      return res.status(400).json({ success: false, message: 'Please specify ticket type(s) and quantity' });
     }
 
-    // Check availability
-    if (ticketType.available < qty) {
-      return res.status(400).json({
-        success: false,
-        message: `Only ${ticketType.available} tickets available for ${ticketTypeName}`,
-      });
+    // Verify all items and calculate total price
+    let amount = 0;
+    for (const item of purchaseItems) {
+      const ticketType = event.ticketTypes.find((t) => t.name === item.ticketTypeName);
+      if (!ticketType) {
+        return res.status(400).json({ success: false, message: `Invalid ticket type: ${item.ticketTypeName}` });
+      }
+      if (ticketType.available < item.quantity) {
+        return res.status(400).json({
+          success: false,
+          message: `Only ${ticketType.available} tickets available for ${item.ticketTypeName}`,
+        });
+      }
+      amount += ticketType.price * item.quantity;
     }
-
-    const amount = ticketType.price * qty;
 
     // Free Ticket shortcut: skip Razorpay, generate order directly
     if (amount === 0) {
@@ -115,22 +128,32 @@ const verifyPayment = async (req, res, next) => {
       eventId,
       ticketTypeName,
       quantity,
+      items,
       razorpayOrderId,
       razorpayPaymentId,
       razorpaySignature,
       isFree,
       isMock,
     } = req.body;
-    const qty = parseInt(quantity) || 1;
 
     const event = await Event.findById(eventId);
     if (!event) {
       return res.status(404).json({ success: false, message: 'Event not found' });
     }
 
-    const ticketType = event.ticketTypes.find((t) => t.name === ticketTypeName);
-    if (!ticketType) {
-      return res.status(400).json({ success: false, message: 'Invalid ticket type' });
+    let purchaseItems = [];
+    if (items && Array.isArray(items) && items.length > 0) {
+      purchaseItems = items.map(item => ({
+        ticketTypeName: item.ticketTypeName,
+        quantity: parseInt(item.quantity) || 1
+      }));
+    } else if (ticketTypeName) {
+      purchaseItems = [{
+        ticketTypeName,
+        quantity: parseInt(quantity) || 1
+      }];
+    } else {
+      return res.status(400).json({ success: false, message: 'Please specify ticket type(s) and quantity' });
     }
 
     // If it's a paid order, verify payment signature
@@ -151,12 +174,24 @@ const verifyPayment = async (req, res, next) => {
     }
 
     // Double check availability
-    if (ticketType.available < qty) {
-      return res.status(400).json({ success: false, message: 'Tickets no longer available' });
+    for (const item of purchaseItems) {
+      const ticketType = event.ticketTypes.find((t) => t.name === item.ticketTypeName);
+      if (!ticketType) {
+        return res.status(400).json({ success: false, message: `Invalid ticket type: ${item.ticketTypeName}` });
+      }
+      if (ticketType.available < item.quantity) {
+        return res.status(400).json({ success: false, message: `Tickets no longer available for ${item.ticketTypeName}` });
+      }
     }
 
-    // Decrement ticket availability
-    ticketType.available -= qty;
+    // Deduct availability and calculate total cost
+    let totalAmount = 0;
+    for (const item of purchaseItems) {
+      const ticketType = event.ticketTypes.find((t) => t.name === item.ticketTypeName);
+      ticketType.available -= item.quantity;
+      totalAmount += ticketType.price * item.quantity;
+    }
+    
     event.totalAvailable = event.ticketTypes.reduce((acc, curr) => acc + curr.available, 0);
     await event.save();
 
@@ -164,7 +199,7 @@ const verifyPayment = async (req, res, next) => {
     const booking = new Booking({
       user: req.user._id,
       event: eventId,
-      totalAmount: ticketType.price * qty,
+      totalAmount,
       razorpayOrderId,
       razorpayPaymentId: razorpayPaymentId || 'pay_free_or_mock',
       razorpaySignature: razorpaySignature || 'sig_free_or_mock',
@@ -173,31 +208,36 @@ const verifyPayment = async (req, res, next) => {
 
     await booking.save();
 
-    // Generate individual tickets
+    // Generate individual tickets for all purchase items
     const tickets = [];
-    for (let i = 0; i < qty; i++) {
-      const ticket = new Ticket({
-        booking: booking._id,
-        user: req.user._id,
-        event: eventId,
-        ticketType: ticketTypeName,
-        price: ticketType.price,
-        ticketCode: generateTicketCode(),
-        status: 'active',
-      });
-      await ticket.save();
-      tickets.push(ticket._id);
+    for (const item of purchaseItems) {
+      const ticketType = event.ticketTypes.find((t) => t.name === item.ticketTypeName);
+      for (let i = 0; i < item.quantity; i++) {
+        const ticket = new Ticket({
+          booking: booking._id,
+          user: req.user._id,
+          event: eventId,
+          ticketType: item.ticketTypeName,
+          price: ticketType.price,
+          ticketCode: generateTicketCode(),
+          status: 'active',
+        });
+        await ticket.save();
+        tickets.push(ticket._id);
+      }
     }
 
     // Link tickets to booking
     booking.tickets = tickets;
     await booking.save();
 
+    const itemSummaries = purchaseItems.map(item => `${item.quantity} x ${item.ticketTypeName}`).join(', ');
+
     // Send a notification
     await Notification.create({
       user: req.user._id,
       title: 'Booking Confirmed!',
-      message: `Successfully booked ${qty} x ${ticketTypeName} ticket(s) for the event '${event.title}'.`,
+      message: `Successfully booked ${itemSummaries} ticket(s) for the event '${event.title}'.`,
     });
 
     res.status(201).json({
@@ -451,6 +491,59 @@ const processRefund = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Get networking list of attendees who opted in to share LinkedIn
+ * @route   GET /api/bookings/event/:eventId/networking
+ * @access  Private (Registered Attendees)
+ */
+const getEventNetworking = async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+
+    const event = await Event.findById(eventId);
+    if (!event) {
+      return res.status(404).json({ success: false, message: 'Event not found' });
+    }
+
+    const userTicket = await Ticket.findOne({ event: eventId, user: req.user._id, status: 'active' });
+    const isOrganiserOrAdmin = event.organiser.toString() === req.user._id.toString() || req.user.role === 'admin';
+
+    if (!userTicket && !isOrganiserOrAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'You must register for this event to view the networking directory.'
+      });
+    }
+
+    const tickets = await Ticket.find({ event: eventId, status: 'active' })
+      .populate('user', 'name email bio profileImage shareLinkedIn linkedinUrl');
+
+    const attendees = [];
+    const seenUsers = new Set();
+
+    tickets.forEach((t) => {
+      if (t.user && t.user.shareLinkedIn && !seenUsers.has(t.user._id.toString())) {
+        seenUsers.add(t.user._id.toString());
+        attendees.push({
+          _id: t.user._id,
+          name: t.user.name,
+          bio: t.user.bio,
+          profileImage: t.user.profileImage,
+          linkedinUrl: t.user.linkedinUrl
+        });
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      count: attendees.length,
+      attendees
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createOrder,
   verifyPayment,
@@ -459,4 +552,5 @@ module.exports = {
   checkInTicket,
   requestRefund,
   processRefund,
+  getEventNetworking,
 };

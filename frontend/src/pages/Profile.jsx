@@ -9,6 +9,8 @@ const Profile = () => {
   const [bio, setBio] = useState(user?.bio || '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [shareLinkedIn, setShareLinkedIn] = useState(user?.shareLinkedIn || false);
+  const [linkedinUrl, setLinkedinUrl] = useState(user?.linkedinUrl || '');
   const [updating, setUpdating] = useState(false);
 
   const handleUpdate = async (e) => {
@@ -21,7 +23,7 @@ const Profile = () => {
 
     setUpdating(true);
     try {
-      const data = { name, bio };
+      const data = { name, bio, shareLinkedIn, linkedinUrl };
       if (password) data.password = password;
 
       const res = await updateProfile(data);
@@ -98,6 +100,39 @@ const Profile = () => {
                 className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-sm text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
+
+            {user?.role === 'attendee' && (
+              <div className="border-t border-slate-100 dark:border-slate-800/60 pt-4 space-y-4">
+                <h4 className="text-xs font-bold text-slate-800 dark:text-white font-sans">Professional Networking Directory</h4>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="shareLinkedIn"
+                    checked={shareLinkedIn}
+                    onChange={(e) => setShareLinkedIn(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-200 text-brand-500 focus:ring-brand-500"
+                  />
+                  <label htmlFor="shareLinkedIn" className="text-xs text-slate-700 dark:text-slate-200 font-semibold select-none cursor-pointer">
+                    Opt-in to share my LinkedIn with other attendees of this event
+                  </label>
+                </div>
+                {shareLinkedIn && (
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">
+                      LinkedIn URL
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://linkedin.com/in/yourprofile"
+                      value={linkedinUrl}
+                      onChange={(e) => setLinkedinUrl(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      required={shareLinkedIn}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="border-t border-slate-100 dark:border-slate-800/60 pt-4 space-y-4">
               <h4 className="text-xs font-bold text-slate-800 dark:text-white">Change Password (Optional)</h4>

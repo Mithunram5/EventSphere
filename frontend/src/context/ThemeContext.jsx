@@ -14,8 +14,8 @@ export const ThemeProvider = ({ children }) => {
   });
 
   useEffect(() => {
-    // Add/remove 'dark' class on <body>
-    const root = window.document.body;
+    // Add/remove 'dark' class on <html>
+    const root = window.document.documentElement;
     if (theme === 'dark') {
       root.classList.add('dark');
       root.classList.remove('light');

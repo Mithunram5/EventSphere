@@ -16,14 +16,48 @@ const EventDetails = () => {
   const [loading, setLoading] = useState(true);
   const [reviewLoading, setReviewLoading] = useState(false);
 
-  // Ticket Booking selection states
-  const [selectedTicketType, setSelectedTicketType] = useState('');
-  const [selectedQuantity, setSelectedQuantity] = useState(1);
+  // Ticket Booking selection states (quantity per ticket type name)
+  const [quantities, setQuantities] = useState({});
 
   // Review form states
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [hasBoughtTicket, setHasBoughtTicket] = useState(false);
+
+  // Networking Directory states
+  const [networkingAttendees, setNetworkingAttendees] = useState([]);
+  const [networkingLoading, setNetworkingLoading] = useState(false);
+
+  // AI Chat Assistant states
+  const [chatInput, setChatInput] = useState('');
+  const [chatHistory, setChatHistory] = useState([
+    { sender: 'ai', text: "Hello! I am your EventSphere AI assistant for this event. Ask me anything about tickets, venue details, or session timings!" }
+  ]);
+  const [chatLoading, setChatLoading] = useState(false);
+
+  const handleSendChat = async (e) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    const userMsg = chatInput;
+    setChatInput('');
+    setChatHistory(prev => [...prev, { sender: 'user', text: userMsg }]);
+    setChatLoading(true);
+
+    try {
+      const res = await api.post('/ai/ask-assistant', {
+        eventId: id,
+        question: userMsg
+      });
+      if (res.data.success) {
+        setChatHistory(prev => [...prev, { sender: 'ai', text: res.data.answer }]);
+      }
+    } catch (error) {
+      setChatHistory(prev => [...prev, { sender: 'ai', text: "Sorry, I am having trouble answering right now. Please try again!" }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
   const fetchEventAndReviews = async () => {
     try {
@@ -34,9 +68,13 @@ const EventDetails = () => {
       if (eventRes.data.success) {
         const ev = eventRes.data.event;
         setEvent(ev);
-        // Pre-select first available ticket type
+        // Initialize quantities to 0
         if (ev.ticketTypes && ev.ticketTypes.length > 0) {
-          setSelectedTicketType(ev.ticketTypes[0].name);
+          const initQty = {};
+          ev.ticketTypes.forEach(t => {
+            initQty[t.name] = 0;
+          });
+          setQuantities(initQty);
         }
       }
 
@@ -72,6 +110,28 @@ const EventDetails = () => {
     fetchEventAndReviews();
   }, [id, user]);
 
+  useEffect(() => {
+    const fetchNetworking = async () => {
+      if (!event || !user) return;
+      const isOrganiserOrAdmin = event.organiser?._id === user._id || user.role === 'admin';
+      if (!hasBoughtTicket && !isOrganiserOrAdmin) return;
+
+      try {
+        setNetworkingLoading(true);
+        const res = await api.get(`/bookings/event/${id}/networking`);
+        if (res.data.success) {
+          setNetworkingAttendees(res.data.attendees);
+        }
+      } catch (err) {
+        console.error('Failed to load networking directory:', err);
+      } finally {
+        setNetworkingLoading(false);
+      }
+    };
+
+    fetchNetworking();
+  }, [event, user, hasBoughtTicket, id]);
+
   const handleWishlistToggle = async () => {
     if (!user) {
       toast.error('Please log in to wishlist events!');
@@ -95,6 +155,16 @@ const EventDetails = () => {
     }
   };
 
+  const handleQuantityChange = (name, val) => {
+    // Restrict max tickets per category to available seats, min 0
+    const ticket = event.ticketTypes.find(t => t.name === name);
+    const maxVal = ticket ? Math.min(5, ticket.available) : 5;
+    setQuantities(prev => ({
+      ...prev,
+      [name]: Math.max(0, Math.min(maxVal, val))
+    }));
+  };
+
   const handleProceedCheckout = () => {
     if (!user) {
       toast.error('Please log in to buy tickets!');
@@ -107,16 +177,17 @@ const EventDetails = () => {
       return;
     }
 
-    if (!selectedTicketType) {
-      toast.error('Please select a ticket type.');
+    const items = Object.entries(quantities)
+      .filter(([_, qty]) => qty > 0)
+      .map(([name, qty]) => `${encodeURIComponent(name)}:${qty}`)
+      .join(',');
+
+    if (!items) {
+      toast.error('Please select at least one ticket.');
       return;
     }
 
-    navigate(
-      `/checkout?eventId=${id}&ticketType=${encodeURIComponent(
-        selectedTicketType
-      )}&quantity=${selectedQuantity}`
-    );
+    navigate(`/checkout?eventId=${id}&items=${items}`);
   };
 
   const handleReviewSubmit = async (e) => {
@@ -188,7 +259,7 @@ const EventDetails = () => {
     minute: '2-digit',
   });
 
-  const selectedTicketObj = event.ticketTypes.find((t) => t.name === selectedTicketType);
+  // Selected ticket calculations handled inline
   const isSoldOut = event.totalAvailable === 0;
 
   const isWishlisted = wishlistIds.includes(id);
@@ -300,6 +371,74 @@ const EventDetails = () => {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Attendee Networking Section */}
+          {user && (hasBoughtTicket || (event.organiser?._id === user._id || user.role === 'admin')) && (
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4 transition-colors duration-200">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                  <span>🤝 Attendee Networking Directory</span>
+                  <span className="text-xs bg-brand-50 text-brand-600 dark:bg-brand-950/40 dark:text-brand-400 px-2 py-0.5 rounded-full font-semibold">
+                    Opt-In
+                  </span>
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Connect with fellow attendees who have opted in to share their profiles. Build your professional network!
+              </p>
+              
+              {networkingLoading ? (
+                <div className="flex justify-center py-4">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand-500 border-t-transparent"></div>
+                </div>
+              ) : networkingAttendees.length === 0 ? (
+                <div className="bg-slate-50 dark:bg-slate-950 rounded-xl p-4 text-center text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  No other attendees have opted in to share their LinkedIn profile yet.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {networkingAttendees.map((attendee) => (
+                    <div
+                      key={attendee._id}
+                      className="p-4 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex items-start justify-between gap-4"
+                    >
+                      <div className="flex gap-3">
+                        {attendee.profileImage ? (
+                          <img
+                            src={attendee.profileImage}
+                            alt={attendee.name}
+                            className="h-10 w-10 rounded-full object-cover shrink-0 border"
+                          />
+                        ) : (
+                          <div className="gradient-bg flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold text-white shadow-sm shrink-0">
+                            {attendee.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-800 dark:text-white">{attendee.name}</h4>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 line-clamp-2 mt-0.5">
+                            {attendee.bio || 'Product designer & developer.'}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <a
+                        href={attendee.linkedinUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-brand-600 hover:text-brand-500 dark:text-brand-400 font-bold text-[10px] flex items-center gap-1 shrink-0 bg-white dark:bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm"
+                      >
+                        <svg className="h-3 w-3 fill-current" viewBox="0 0 24 24">
+                          <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.779-1.75-1.75s.784-1.75 1.75-1.75 1.75.779 1.75 1.75-.784 1.75-1.75 1.75zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                        </svg>
+                        LinkedIn
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -459,72 +598,71 @@ const EventDetails = () => {
             ) : (
               <div className="space-y-4">
                 {/* Ticket Types */}
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    Ticket Type
+                    Ticket Types & Quantities
                   </label>
-                  {event.ticketTypes.map((ticket) => (
-                    <button
-                      key={ticket.name}
-                      type="button"
-                      disabled={ticket.available === 0}
-                      onClick={() => {
-                        setSelectedTicketType(ticket.name);
-                        setSelectedQuantity(1);
-                      }}
-                      className={`w-full flex items-center justify-between rounded-xl border p-3 text-left transition-all ${
-                        ticket.available === 0
-                          ? 'opacity-40 cursor-not-allowed bg-slate-50 border-slate-200'
-                          : selectedTicketType === ticket.name
-                          ? 'border-brand-500 bg-brand-50/20 dark:bg-brand-950/20 text-brand-600 dark:text-brand-400 font-bold'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 text-slate-600 dark:text-slate-300'
-                      }`}
-                    >
-                      <div>
-                        <p className="text-xs font-bold">{ticket.name}</p>
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold mt-0.5">
-                          {ticket.available} seats left
-                        </p>
+                  {event.ticketTypes.map((ticket) => {
+                    const qty = quantities[ticket.name] || 0;
+                    return (
+                      <div
+                        key={ticket.name}
+                        className="flex items-center justify-between rounded-xl border p-3 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 transition-all"
+                      >
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-bold text-slate-800 dark:text-white">{ticket.name}</p>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold">
+                            {ticket.available} seats left
+                          </p>
+                          <p className="text-xs font-extrabold text-slate-800 dark:text-white mt-1">
+                            {ticket.price === 0 ? 'Free' : `₹${ticket.price}`}
+                          </p>
+                        </div>
+                        
+                        {ticket.available === 0 ? (
+                          <span className="text-[10px] uppercase font-bold text-red-500 bg-red-50 dark:bg-red-950/20 px-2 py-0.5 rounded-md">Sold Out</span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleQuantityChange(ticket.name, qty - 1)}
+                              className="h-7 w-7 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-350 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-sm"
+                            >
+                              -
+                            </button>
+                            <span className="w-6 text-center text-xs font-bold text-slate-800 dark:text-white">{qty}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleQuantityChange(ticket.name, qty + 1)}
+                              className="h-7 w-7 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-350 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-sm"
+                            >
+                              +
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <span className="text-sm font-extrabold text-slate-800 dark:text-white">
-                        {ticket.price === 0 ? 'Free' : `₹${ticket.price}`}
-                      </span>
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
 
-                {/* Quantity */}
-                {selectedTicketObj && (
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">
-                      Quantity
-                    </label>
-                    <select
-                      value={selectedQuantity}
-                      onChange={(e) => setSelectedQuantity(parseInt(e.target.value))}
-                      className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2.5 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    >
-                      {Array.from({
-                        length: Math.min(5, selectedTicketObj.available),
-                      }).map((_, i) => (
-                        <option key={i + 1} value={i + 1}>
-                          {i + 1} {i + 1 === 1 ? 'ticket' : 'tickets'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
                 {/* Pricing Summary */}
-                {selectedTicketObj && (
+                {Object.values(quantities).some(q => q > 0) && (
                   <div className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3 border border-slate-100 dark:border-slate-800/40 text-xs space-y-1">
-                    <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                      <span>Rate:</span>
-                      <span>₹{selectedTicketObj.price} x {selectedQuantity}</span>
-                    </div>
+                    {event.ticketTypes.map(ticket => {
+                      const qty = quantities[ticket.name] || 0;
+                      if (qty === 0) return null;
+                      return (
+                        <div key={ticket.name} className="flex justify-between text-slate-500 dark:text-slate-400">
+                          <span>{ticket.name} x {qty}:</span>
+                          <span>₹{ticket.price * qty}</span>
+                        </div>
+                      );
+                    })}
                     <div className="flex justify-between font-bold text-slate-800 dark:text-white text-sm pt-1 border-t border-slate-200 dark:border-slate-800">
                       <span>Total Amount:</span>
-                      <span>₹{selectedTicketObj.price * selectedQuantity}</span>
+                      <span>
+                        ₹{event.ticketTypes.reduce((acc, t) => acc + (t.price * (quantities[t.name] || 0)), 0)}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -549,6 +687,57 @@ const EventDetails = () => {
                 )}
               </div>
             )}
+          </div>
+
+          {/* AI Event Assistant Panel */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4 transition-colors duration-200">
+            <div>
+              <h3 className="text-md font-bold text-slate-800 dark:text-white flex items-center gap-1.5 font-sans">
+                <span>🤖 Smart AI Assistant</span>
+              </h3>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold mt-0.5">Instant answers about this event</p>
+            </div>
+            
+            {/* Chat Box */}
+            <div className="h-56 overflow-y-auto border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 rounded-xl p-3 space-y-3 flex flex-col justify-start">
+              {chatHistory.map((chat, idx) => (
+                <div
+                  key={idx}
+                  className={`max-w-[85%] rounded-xl p-2.5 text-xs font-sans ${
+                    chat.sender === 'user'
+                      ? 'bg-brand-500 text-white self-end rounded-tr-none'
+                      : 'bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-200 self-start rounded-tl-none shadow-sm'
+                  }`}
+                >
+                  <p>{chat.text}</p>
+                </div>
+              ))}
+              {chatLoading && (
+                <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-500 rounded-xl p-2.5 text-xs self-start rounded-tl-none flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-slate-400 animate-bounce"></span>
+                  <span className="h-2 w-2 rounded-full bg-slate-400 animate-bounce [animation-delay:0.2s]"></span>
+                  <span className="h-2 w-2 rounded-full bg-slate-400 animate-bounce [animation-delay:0.4s]"></span>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleSendChat} className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Ask: When is the event?"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                disabled={chatLoading}
+                className="flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+              <button
+                type="submit"
+                disabled={chatLoading || !chatInput.trim()}
+                className="gradient-btn rounded-xl px-3 py-2 text-xs font-bold shadow disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Send
+              </button>
+            </form>
           </div>
         </div>
       </div>
