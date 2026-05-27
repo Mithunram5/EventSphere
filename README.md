@@ -60,8 +60,8 @@ EventSphere/
 
 ### 1. User Roles & Dashboards
 - **Attendee:** Can search/filter events, manage a personal wishlist, RSVP to free events or purchase paid tickets, view QR codes, network with other attendees, ask the AI assistant questions, and generate an AI-optimized event schedule/itinerary.
-- **Organiser:** Can create new events, write rich event copy using the **AI description writer**, view real-time registrations, export attendees to CSV, process refund requests, simulate payouts, and process check-ins via manual ticket code verification.
-- **Admin:** Monitors global stats (registrations, revenue, user signups), modifies user roles (promotes to organiser/admin), and bans accounts.
+- **Organiser:** Can create new events, write rich event copy using the **AI description writer**, view real-time registrations, export attendees to CSV, process refund requests, simulate payouts, run **QR camera check-in** (with manual fallback), and broadcast **announcements** (reminders, check-in instructions, post-event feedback prompts) to all registered attendees.
+- **Admin:** Monitors global stats (registrations, revenue, user signups), modifies user roles (promotes to organiser/admin), bans accounts, and moderates all events (search + delete with dependent cleanup).
 
 ### 2. Payments & Booking Flows
 - Multi-ticket checkout allowing booking different ticket types (e.g. VIP and General) in one transaction.
@@ -190,20 +190,94 @@ On the `/login` screen you can either enter these credentials manually, or simpl
 - `POST /` - Creates a new event.
 - `PUT /:id` - Modifies event details.
 - `DELETE /:id` - Deletes event.
-- `POST /upload` - Uploads custom banners (multipart handler).
+- `GET /myevents` - Lists organiser-owned events (organiser/admin).
 
 ### Bookings Module (`/api/bookings`)
 - `POST /order` - Standard multi-ticket order initialization.
 - `POST /verify` - Confirms Razorpay signatures and generates attendee tickets.
-- `GET /user` - Lists bookings registered to the attendee.
+- `GET /my-tickets` - Lists tickets registered to the attendee.
 - `GET /event/:eventId/attendees` - Lists all registrations for an organiser's event.
 - `GET /event/:eventId/networking` - Lists opted-in attendee networking profiles.
 - `POST /ticket/:ticketId/refund-request` - Submits a refund claim.
 - `PUT /ticket/:ticketId/refund-process` - Allows organisers to approve/reject claims.
-- `POST /checkin` - Validates ticket ID codes.
+- `POST /check-in` - Validates ticket code and marks attendee checked-in.
+
+### Notifications Module (`/api/notifications`)
+- `GET /` - Lists in-app notifications for the logged-in user.
+- `PUT /:id/read` - Mark a notification as read.
+- `POST /event/:eventId/broadcast` - Broadcast an announcement to all attendees of an event (organiser/admin).
 
 ### AI Module (`/api/ai`)
 - `POST /ask-assistant` - Real-time event Q&A chatbot assistant.
 - `POST /generate-description` - Invokes Gemini to turn event bullet points into copy paragraphs.
 - `GET /recommendations` - Lists user recommendations.
 - `POST /optimize-schedule` - Re-arranges event itinerary plans.
+
+### Admin Module (`/api/admin`)
+- `GET /stats` - Global platform analytics.
+- `GET /users` - User registry.
+- `PUT /users/:id/role` - Update a user role.
+- `DELETE /users/:id` - Remove a user.
+- `GET /events` - Event moderation list (admin).
+- `DELETE /events/:id` - Delete an event with dependent cleanup (admin).
+
+---
+
+## 🌍 Deployment (Vercel + Render)
+
+This repo is structured for a **split deployment**:
+
+- **Backend API** on **Render**
+- **Frontend** on **Vercel**
+
+### A) Deploy Backend to Render (Node/Express)
+
+1. Create a new **Web Service** on Render and connect your GitHub repo.
+2. Set:
+   - **Root Directory**: `backend`
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+3. Add Environment Variables in Render:
+
+   - `MONGODB_URI` = your MongoDB Atlas connection string
+   - `JWT_SECRET` = a strong random secret
+   - `JWT_EXPIRE` = `7d` (optional)
+   - `RAZORPAY_KEY_ID` = (optional)
+   - `RAZORPAY_KEY_SECRET` = (optional)
+   - `GEMINI_API_KEY` = (optional)
+   - `CLOUDINARY_CLOUD_NAME` = (optional)
+   - `CLOUDINARY_API_KEY` = (optional)
+   - `CLOUDINARY_API_SECRET` = (optional)
+
+4. Deploy and copy your public API URL, for example:
+   - `https://eventsphere-api.onrender.com`
+
+Notes:
+- Render sets `PORT` automatically. The backend uses `process.env.PORT`.
+- CORS is currently permissive (`app.use(cors())`). For production hardening, restrict allowed origins to your Vercel domain.
+
+### B) Deploy Frontend to Vercel (Vite/React)
+
+1. Create a new **Project** on Vercel and import your GitHub repo.
+2. Set:
+   - **Root Directory**: `frontend`
+   - **Framework Preset**: Vite
+3. Add Environment Variables in Vercel:
+
+   - `VITE_API_URL` = your Render API base URL + `/api`
+     - Example: `https://eventsphere-api.onrender.com/api`
+   - `VITE_RAZORPAY_KEY_ID` = (optional; required only for real Razorpay sandbox modal)
+
+4. Deploy.
+
+### C) Verify Production URLs
+
+- Open the Vercel frontend URL
+- Use **Sample Login** from `/login`
+- Confirm:
+  - Events load
+  - Checkout works (free + paid sandbox/mock)
+  - Tickets show QR
+  - Organiser can open **Scan QR with Camera** and check-in tickets
+  - Organiser announcements appear in attendee notifications
+  - Admin can moderate events and export users CSV
