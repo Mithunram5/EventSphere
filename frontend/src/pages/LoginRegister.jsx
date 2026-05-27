@@ -72,6 +72,31 @@ const LoginRegister = () => {
     }
   };
 
+  const handleSampleLogin = async (roleKey) => {
+    const presetMap = {
+      attendee: { email: 'attendee@eventsphere.com', password: 'password123' },
+      organiser: { email: 'organiser@eventsphere.com', password: 'password123' },
+      admin: { email: 'admin@eventsphere.com', password: 'password123' },
+    };
+
+    const preset = presetMap[roleKey];
+    if (!preset) return;
+
+    setFormLoading(true);
+    try {
+      const res = await login(preset.email, preset.password);
+      if (res.success) {
+        toast.success(`Logged in as ${roleKey} sample user.`);
+      } else {
+        toast.error(res.error || 'Sample login failed.');
+      }
+    } catch (err) {
+      toast.error('Unable to perform sample login right now.');
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
   return (
     <div className="flex min-h-[80vh] items-center justify-center px-4 py-12 sm:px-6 lg:px-8 font-sans">
       <motion.div
@@ -207,6 +232,44 @@ const LoginRegister = () => {
             )}
           </button>
         </form>
+
+        {/* Sample login shortcuts */}
+        {!isRegister && (
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500 font-semibold">
+              Or jump in with a sample role
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                type="button"
+                disabled={formLoading}
+                onClick={() => handleSampleLogin('attendee')}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 px-3 py-2 text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-300 transition-all"
+              >
+                Attendee Demo
+              </button>
+              <button
+                type="button"
+                disabled={formLoading}
+                onClick={() => handleSampleLogin('organiser')}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 px-3 py-2 text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-300 transition-all"
+              >
+                Organiser Demo
+              </button>
+              <button
+                type="button"
+                disabled={formLoading}
+                onClick={() => handleSampleLogin('admin')}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 px-3 py-2 text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-300 transition-all"
+              >
+                Admin Demo
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500">
+              Demo credentials are pre-seeded in the backend and safe to use for testing flows like checkout, check-in, refunds, and AI tools.
+            </p>
+          </div>
+        )}
       </motion.div>
     </div>
   );

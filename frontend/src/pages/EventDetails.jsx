@@ -579,165 +579,170 @@ const EventDetails = () => {
           </div>
         </div>
 
-        {/* Right Column: Ticket Purchase selection */}
+        {/* Right Column: Ticket Purchase selection and AI Assistant */}
         <div className="lg:col-span-1">
-          <div className="sticky top-24 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-6 transition-colors duration-200">
-            <div>
-              <h3 className="text-lg font-bold text-slate-800 dark:text-white">Tickets Selection</h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold mt-0.5">Select category & count</p>
-            </div>
-
-            {isSoldOut ? (
-              <div className="rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 p-4 text-center">
-                <span className="text-xl mb-1 block">🚫</span>
-                <p className="text-xs font-bold text-red-600 dark:text-red-400">Sold Out</p>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  All tickets for this event have been sold out.
-                </p>
+          <div className="sticky top-24 space-y-6">
+            
+            {/* Tickets Selection Card */}
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-6 transition-colors duration-200">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Tickets Selection</h3>
+                <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold mt-0.5">Select category & count</p>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Ticket Types */}
-                <div className="space-y-3">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    Ticket Types & Quantities
-                  </label>
-                  {event.ticketTypes.map((ticket) => {
-                    const qty = quantities[ticket.name] || 0;
-                    return (
-                      <div
-                        key={ticket.name}
-                        className="flex items-center justify-between rounded-xl border p-3 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 transition-all"
-                      >
-                        <div className="space-y-0.5">
-                          <p className="text-xs font-bold text-slate-800 dark:text-white">{ticket.name}</p>
-                          <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold">
-                            {ticket.available} seats left
-                          </p>
-                          <p className="text-xs font-extrabold text-slate-800 dark:text-white mt-1">
-                            {ticket.price === 0 ? 'Free' : `₹${ticket.price}`}
-                          </p>
-                        </div>
-                        
-                        {ticket.available === 0 ? (
-                          <span className="text-[10px] uppercase font-bold text-red-500 bg-red-50 dark:bg-red-950/20 px-2 py-0.5 rounded-md">Sold Out</span>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleQuantityChange(ticket.name, qty - 1)}
-                              className="h-7 w-7 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-350 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-sm"
-                            >
-                              -
-                            </button>
-                            <span className="w-6 text-center text-xs font-bold text-slate-800 dark:text-white">{qty}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleQuantityChange(ticket.name, qty + 1)}
-                              className="h-7 w-7 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-350 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-sm"
-                            >
-                              +
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
 
-                {/* Pricing Summary */}
-                {Object.values(quantities).some(q => q > 0) && (
-                  <div className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3 border border-slate-100 dark:border-slate-800/40 text-xs space-y-1">
-                    {event.ticketTypes.map(ticket => {
+              {isSoldOut ? (
+                <div className="rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 p-4 text-center">
+                  <span className="text-xl mb-1 block">🚫</span>
+                  <p className="text-xs font-bold text-red-600 dark:text-red-400">Sold Out</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    All tickets for this event have been sold out.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Ticket Types */}
+                  <div className="space-y-3">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                      Ticket Types & Quantities
+                    </label>
+                    {event.ticketTypes.map((ticket) => {
                       const qty = quantities[ticket.name] || 0;
-                      if (qty === 0) return null;
                       return (
-                        <div key={ticket.name} className="flex justify-between text-slate-500 dark:text-slate-400">
-                          <span>{ticket.name} x {qty}:</span>
-                          <span>₹{ticket.price * qty}</span>
+                        <div
+                          key={ticket.name}
+                          className="flex items-center justify-between rounded-xl border p-3 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 transition-all"
+                        >
+                          <div className="space-y-0.5">
+                            <p className="text-xs font-bold text-slate-800 dark:text-white">{ticket.name}</p>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold">
+                              {ticket.available} seats left
+                            </p>
+                            <p className="text-xs font-extrabold text-slate-800 dark:text-white mt-1">
+                              {ticket.price === 0 ? 'Free' : `₹${ticket.price}`}
+                            </p>
+                          </div>
+                          
+                          {ticket.available === 0 ? (
+                            <span className="text-[10px] uppercase font-bold text-red-500 bg-red-50 dark:bg-red-950/20 px-2 py-0.5 rounded-md">Sold Out</span>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleQuantityChange(ticket.name, qty - 1)}
+                                className="h-7 w-7 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-350 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-sm"
+                              >
+                                -
+                              </button>
+                              <span className="w-6 text-center text-xs font-bold text-slate-800 dark:text-white">{qty}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleQuantityChange(ticket.name, qty + 1)}
+                                className="h-7 w-7 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-350 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-sm"
+                              >
+                                +
+                              </button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
-                    <div className="flex justify-between font-bold text-slate-800 dark:text-white text-sm pt-1 border-t border-slate-200 dark:border-slate-800">
-                      <span>Total Amount:</span>
-                      <span>
-                        ₹{event.ticketTypes.reduce((acc, t) => acc + (t.price * (quantities[t.name] || 0)), 0)}
-                      </span>
-                    </div>
                   </div>
-                )}
 
-                {/* Checkout Trigger */}
-                {(!user || user.role === 'attendee') && (
-                  <button
-                    onClick={handleProceedCheckout}
-                    className="gradient-btn w-full rounded-xl py-3 text-sm font-bold flex items-center justify-center gap-2"
-                  >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                    </svg>
-                    Proceed to Register
-                  </button>
-                )}
-                
-                {user && user.role !== 'attendee' && (
-                  <p className="text-center text-[10px] text-slate-400 dark:text-slate-500 font-semibold bg-slate-50 dark:bg-slate-950 p-2 rounded-lg">
-                    Logged in as '{user.role}'. Ticket purchases are only permitted on attendee accounts.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
+                  {/* Pricing Summary */}
+                  {Object.values(quantities).some(q => q > 0) && (
+                    <div className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3 border border-slate-100 dark:border-slate-800/40 text-xs space-y-1">
+                      {event.ticketTypes.map(ticket => {
+                        const qty = quantities[ticket.name] || 0;
+                        if (qty === 0) return null;
+                        return (
+                          <div key={ticket.name} className="flex justify-between text-slate-500 dark:text-slate-400">
+                            <span>{ticket.name} x {qty}:</span>
+                            <span>₹{ticket.price * qty}</span>
+                          </div>
+                        );
+                      })}
+                      <div className="flex justify-between font-bold text-slate-800 dark:text-white text-sm pt-1 border-t border-slate-200 dark:border-slate-800">
+                        <span>Total Amount:</span>
+                        <span>
+                          ₹{event.ticketTypes.reduce((acc, t) => acc + (t.price * (quantities[t.name] || 0)), 0)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
-          {/* AI Event Assistant Panel */}
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4 transition-colors duration-200">
-            <div>
-              <h3 className="text-md font-bold text-slate-800 dark:text-white flex items-center gap-1.5 font-sans">
-                <span>🤖 Smart AI Assistant</span>
-              </h3>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold mt-0.5">Instant answers about this event</p>
-            </div>
-            
-            {/* Chat Box */}
-            <div className="h-56 overflow-y-auto border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 rounded-xl p-3 space-y-3 flex flex-col justify-start">
-              {chatHistory.map((chat, idx) => (
-                <div
-                  key={idx}
-                  className={`max-w-[85%] rounded-xl p-2.5 text-xs font-sans ${
-                    chat.sender === 'user'
-                      ? 'bg-brand-500 text-white self-end rounded-tr-none'
-                      : 'bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-200 self-start rounded-tl-none shadow-sm'
-                  }`}
-                >
-                  <p>{chat.text}</p>
-                </div>
-              ))}
-              {chatLoading && (
-                <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-500 rounded-xl p-2.5 text-xs self-start rounded-tl-none flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-slate-400 animate-bounce"></span>
-                  <span className="h-2 w-2 rounded-full bg-slate-400 animate-bounce [animation-delay:0.2s]"></span>
-                  <span className="h-2 w-2 rounded-full bg-slate-400 animate-bounce [animation-delay:0.4s]"></span>
+                  {/* Checkout Trigger */}
+                  {(!user || user.role === 'attendee') && (
+                    <button
+                      onClick={handleProceedCheckout}
+                      className="gradient-btn w-full rounded-xl py-3 text-sm font-bold flex items-center justify-center gap-2"
+                    >
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                      </svg>
+                      Proceed to Register
+                    </button>
+                  )}
+                  
+                  {user && user.role !== 'attendee' && (
+                    <p className="text-center text-[10px] text-slate-400 dark:text-slate-500 font-semibold bg-slate-50 dark:bg-slate-950 p-2 rounded-lg">
+                      Logged in as '{user.role}'. Ticket purchases are only permitted on attendee accounts.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
 
-            <form onSubmit={handleSendChat} className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Ask: When is the event?"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                disabled={chatLoading}
-                className="flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-              <button
-                type="submit"
-                disabled={chatLoading || !chatInput.trim()}
-                className="gradient-btn rounded-xl px-3 py-2 text-xs font-bold shadow disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Send
-              </button>
-            </form>
+            {/* AI Event Assistant Panel */}
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4 transition-colors duration-200">
+              <div>
+                <h3 className="text-md font-bold text-slate-800 dark:text-white flex items-center gap-1.5 font-sans">
+                  <span>🤖 Smart AI Assistant</span>
+                </h3>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold mt-0.5">Instant answers about this event</p>
+              </div>
+              
+              {/* Chat Box */}
+              <div className="h-56 overflow-y-auto border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 rounded-xl p-3 space-y-3 flex flex-col justify-start">
+                {chatHistory.map((chat, idx) => (
+                  <div
+                    key={idx}
+                    className={`max-w-[85%] rounded-xl p-2.5 text-xs font-sans ${
+                      chat.sender === 'user'
+                        ? 'bg-brand-500 text-white self-end rounded-tr-none'
+                        : 'bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-200 self-start rounded-tl-none shadow-sm'
+                    }`}
+                  >
+                    <p>{chat.text}</p>
+                  </div>
+                ))}
+                {chatLoading && (
+                  <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-500 rounded-xl p-2.5 text-xs self-start rounded-tl-none flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-slate-400 animate-bounce"></span>
+                    <span className="h-2 w-2 rounded-full bg-slate-400 animate-bounce [animation-delay:0.2s]"></span>
+                    <span className="h-2 w-2 rounded-full bg-slate-400 animate-bounce [animation-delay:0.4s]"></span>
+                  </div>
+                )}
+              </div>
+
+              <form onSubmit={handleSendChat} className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Ask: When is the event?"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  disabled={chatLoading}
+                  className="flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <button
+                  type="submit"
+                  disabled={chatLoading || !chatInput.trim()}
+                  className="gradient-btn rounded-xl px-3 py-2 text-xs font-bold shadow disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Send
+                </button>
+              </form>
+            </div>
+
           </div>
         </div>
       </div>

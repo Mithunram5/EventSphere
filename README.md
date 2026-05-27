@@ -153,6 +153,29 @@ npm run dev
 
 ---
 
+## 🔑 Sample Login Accounts (Pre-seeded)
+
+The backend ships with three ready-to-use demo users created by the database seeder (`backend/src/utils/seeder.js`). Use these to explore flows without registering manually:
+
+- **Attendee Demo**
+  - Email: `attendee@eventsphere.com`
+  - Password: `password123`
+  - Best for: browsing & filtering events, adding to wishlist, multi-ticket checkout (free and paid), viewing QR tickets, networking opt-in, post-event feedback, and AI schedule optimisation.
+
+- **Organiser Demo**
+  - Email: `organiser@eventsphere.com`
+  - Password: `password123`
+  - Best for: creating and editing events (name, date/time, venue, category, description, banner), managing ticket tiers, tracking registrations/revenue/check-ins, exporting attendee CSV, processing refund requests, and simulating organiser payouts.
+
+- **Admin Demo**
+  - Email: `admin@eventsphere.com`
+  - Password: `password123`
+  - Best for: reviewing admin dashboards and exercising elevated access across attendee and organiser views.
+
+On the `/login` screen you can either enter these credentials manually, or simply click the **“Attendee Demo / Organiser Demo / Admin Demo”** buttons for one-click sample logins.
+
+---
+
 ## 🔌 API Documentation
 
 ### Auth Module (`/api/auth`)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import StatCard from '../components/dashboard/StatCard';
 import Modal from '../components/common/Modal';
@@ -24,6 +24,13 @@ const OrganiserDashboard = () => {
   const [selectedEventForEdit, setSelectedEventForEdit] = useState(null);
   const [rosterModalOpen, setRosterModalOpen] = useState(false);
   const [selectedEventForRoster, setSelectedEventForRoster] = useState(null);
+  
+  // QR Camera Scanner States
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
+  const [cameraStream, setCameraStream] = useState(null);
+  const videoRef = useRef(null);
+  const [scannedTicketsList, setScannedTicketsList] = useState([]);
+  const [selectedScanEvent, setSelectedScanEvent] = useState('');
   
   // Roster lists
   const [rosterTickets, setRosterTickets] = useState([]);
@@ -263,7 +270,7 @@ const OrganiserDashboard = () => {
 
   // Manual Check-in Submit
   const handleCheckInSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!checkInCode.trim()) {
       toast.error('Please enter a ticket code!');
       return;
@@ -284,13 +291,87 @@ const OrganiserDashboard = () => {
           }
         }
         fetchDashboardData(); // update statistics counts
+        return { success: true };
       }
     } catch (error) {
       const msg = error.response?.data?.message || 'Check-in validation failed.';
       toast.error(msg);
+      return { success: false };
     } finally {
       setCheckingIn(false);
     }
+  };
+
+  // Open QR Camera Scanner
+  const startCameraScanner = async (eventId = '') => {
+    setQrScannerOpen(true);
+    setSelectedScanEvent(eventId || (events[0]?._id || ''));
+    
+    // Fetch unscanned tickets list to let organisers easily select one to simulate camera detection
+    try {
+      const activeEventId = eventId || (events[0]?._id || '');
+      if (activeEventId) {
+        const ticketRes = await api.get(`/bookings/event/${activeEventId}/attendees`);
+        if (ticketRes.data.success) {
+          setScannedTicketsList(ticketRes.data.tickets.filter(t => !t.checkedIn && t.status === 'active'));
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+
+    // Initialize actual camera stream to make it real-world production-quality
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      setCameraStream(stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.log('Webcam permission denied or unavailable. Operating inside immersive simulated finder mode.');
+    }
+  };
+
+  // Stop QR Camera Scanner
+  const stopCameraScanner = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setQrScannerOpen(false);
+  };
+
+  // Trigger scanning detection
+  const triggerSimulatedScan = async (code) => {
+    setCheckInCode(code);
+    toast.loading('Analyzing entry pass barcode...', { id: 'scan-detect', duration: 1000 });
+    
+    setTimeout(async () => {
+      setCheckingIn(true);
+      try {
+        const res = await api.post('/bookings/check-in', { ticketCode: code });
+        if (res.data.success) {
+          toast.success(`Access Granted! ticket validated: ${code}`, { id: 'scan-detect' });
+          setCheckInCode('');
+          
+          // Remove from local scan list
+          setScannedTicketsList(prev => prev.filter(t => t.ticketCode !== code));
+          
+          if (selectedEventForRoster) {
+            const rosterRes = await api.get(`/bookings/event/${selectedEventForRoster._id}/attendees`);
+            if (rosterRes.data.success) {
+              setRosterTickets(rosterRes.data.tickets);
+            }
+          }
+          fetchDashboardData();
+        }
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Invalid scanning credential.', { id: 'scan-detect' });
+      } finally {
+        setCheckingIn(false);
+        setCheckInCode('');
+      }
+    }, 1000);
   };
 
   // Process refund (approve/reject)
@@ -528,90 +609,95 @@ const OrganiserDashboard = () => {
           </div>
         </div>
 
-        {/* Right Column: Ticket check-in desk */}
+        {/* Right Column: Ticket check-in desk and Payout desk */}
         <div className="lg:col-span-1">
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4 transition-colors duration-200 sticky top-24">
-            <div>
-              <h3 className="text-md font-bold text-slate-800 dark:text-white">Ticket Check-In Desk</h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold mt-0.5">Input ticket barcodes for verification</p>
-            </div>
-
-            <form onSubmit={handleCheckInSubmit} className="space-y-3">
-              <input
-                type="text"
-                placeholder="Enter Ticket Code (e.g. ES-2026-...)"
-                value={checkInCode}
-                onChange={(e) => setCheckInCode(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-sm text-slate-800 dark:text-white placeholder-slate-400 font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-              <button
-                type="submit"
-                disabled={checkingIn}
-                className="gradient-btn w-full rounded-xl py-3 text-xs font-bold shadow flex items-center justify-center gap-1.5"
-              >
-                {checkingIn ? (
-                  <span className="h-4.5 w-4.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                ) : (
-                  <>
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
-                    </svg>
-                    Verify & Check In
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
-
-          {/* Payout Settlement Simulation Panel */}
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4 transition-colors duration-200">
-            <div>
-              <h3 className="text-md font-bold text-slate-800 dark:text-white">Organiser Payout Desk</h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold mt-0.5">Simulate bank settlements</p>
-            </div>
+          <div className="sticky top-24 space-y-6">
             
-            <div className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3 border border-slate-100 dark:border-slate-800/40 text-xs space-y-1.5 font-sans">
-              <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                <span>Gross Earnings:</span>
-                <span className="font-semibold text-slate-800 dark:text-white">₹{stats.totalRevenue}</span>
+            {/* Ticket Check-In Desk */}
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4 transition-colors duration-200">
+              <div>
+                <h3 className="text-md font-bold text-slate-800 dark:text-white">Ticket Check-In Desk</h3>
+                <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold mt-0.5">Input ticket barcodes for verification</p>
               </div>
-              <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                <span>Platform Commission (10%):</span>
-                <span className="font-semibold text-slate-800 dark:text-white">₹{(stats.totalRevenue * 0.10).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between font-bold text-slate-800 dark:text-white text-sm pt-1.5 border-t border-slate-200 dark:border-slate-800">
-                <span>Net Settlable Payout:</span>
-                <span>₹{(stats.totalRevenue * 0.90).toFixed(2)}</span>
-              </div>
+
+              <form onSubmit={handleCheckInSubmit} className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="Enter Ticket Code (e.g. ES-2026-...)"
+                  value={checkInCode}
+                  onChange={(e) => setCheckInCode(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-sm text-slate-800 dark:text-white placeholder-slate-400 font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <button
+                  type="submit"
+                  disabled={checkingIn}
+                  className="gradient-btn w-full rounded-xl py-3 text-xs font-bold shadow flex items-center justify-center gap-1.5"
+                >
+                  {checkingIn ? (
+                    <span className="h-4.5 w-4.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  ) : (
+                    <>
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
+                      </svg>
+                      Verify & Check In
+                    </>
+                  )}
+                </button>
+              </form>
             </div>
 
-            <button
-              type="button"
-              disabled={payoutInProgress || stats.totalRevenue === 0}
-              onClick={handlePayoutTrigger}
-              className="gradient-btn w-full rounded-xl py-3 text-xs font-bold shadow flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {payoutInProgress ? (
-                <span className="h-4.5 w-4.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              ) : (
-                'Trigger Payout Settlement'
-              )}
-            </button>
-            
-            {/* Historical settlements list */}
-            {payoutsList.length > 0 && (
-              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Settlement History</p>
-                <div className="space-y-1.5">
-                  {payoutsList.map(p => (
-                    <div key={p.id} className="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-400">
-                      <span>{p.date} • {p.id}</span>
-                      <span className="font-bold text-slate-800 dark:text-white">₹{p.amount.toFixed(2)} ({p.status})</span>
-                    </div>
-                  ))}
+            {/* Payout Settlement Simulation Panel */}
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4 transition-colors duration-200">
+              <div>
+                <h3 className="text-md font-bold text-slate-800 dark:text-white">Organiser Payout Desk</h3>
+                <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold mt-0.5">Simulate bank settlements</p>
+              </div>
+              
+              <div className="bg-slate-50 dark:bg-slate-950 rounded-xl p-3 border border-slate-100 dark:border-slate-800/40 text-xs space-y-1.5 font-sans">
+                <div className="flex justify-between text-slate-500 dark:text-slate-400">
+                  <span>Gross Earnings:</span>
+                  <span className="font-semibold text-slate-800 dark:text-white">₹{stats.totalRevenue}</span>
+                </div>
+                <div className="flex justify-between text-slate-500 dark:text-slate-400">
+                  <span>Platform Commission (10%):</span>
+                  <span className="font-semibold text-slate-800 dark:text-white">₹{(stats.totalRevenue * 0.10).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-slate-800 dark:text-white text-sm pt-1.5 border-t border-slate-200 dark:border-slate-800">
+                  <span>Net Settlable Payout:</span>
+                  <span>₹{(stats.totalRevenue * 0.90).toFixed(2)}</span>
                 </div>
               </div>
-            )}
+
+              <button
+                type="button"
+                disabled={payoutInProgress || stats.totalRevenue === 0}
+                onClick={handlePayoutTrigger}
+                className="gradient-btn w-full rounded-xl py-3 text-xs font-bold shadow flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {payoutInProgress ? (
+                  <span className="h-4.5 w-4.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  'Trigger Payout Settlement'
+                )}
+              </button>
+              
+              {/* Historical settlements list */}
+              {payoutsList.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Settlement History</p>
+                  <div className="space-y-1.5">
+                    {payoutsList.map(p => (
+                      <div key={p.id} className="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-400">
+                        <span>{p.date} • {p.id}</span>
+                        <span className="font-bold text-slate-800 dark:text-white">₹{p.amount.toFixed(2)} ({p.status})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
           </div>
         </div>
       </div>
