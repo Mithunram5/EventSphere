@@ -2,6 +2,8 @@ const User = require('../models/User');
 const Event = require('../models/Event');
 const Booking = require('../models/Booking');
 const Ticket = require('../models/Ticket');
+const Wishlist = require('../models/Wishlist');
+const Review = require('../models/Review');
 
 /**
  * @desc    Get dashboard analytics / platform statistics
@@ -185,4 +187,61 @@ module.exports = {
   getAllUsers,
   updateUserRole,
   deleteUser,
+  /**
+   * @desc    List all events for moderation
+   * @route   GET /api/admin/events
+   * @access  Private (Admin)
+   */
+  getAllEventsAdmin: async (req, res, next) => {
+    try {
+      const { search, category, city } = req.query;
+      const query = {};
+
+      if (search) {
+        query.$or = [
+          { title: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } },
+          { venue: { $regex: search, $options: 'i' } },
+        ];
+      }
+      if (category && category !== 'All') query.category = category;
+      if (city && city !== 'All') query.city = { $regex: city, $options: 'i' };
+
+      const events = await Event.find(query)
+        .populate('organiser', 'name email')
+        .sort({ createdAt: -1 });
+
+      res.status(200).json({ success: true, count: events.length, events });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
+   * @desc    Delete an event with dependent cleanup
+   * @route   DELETE /api/admin/events/:id
+   * @access  Private (Admin)
+   */
+  deleteEventAdmin: async (req, res, next) => {
+    try {
+      const event = await Event.findById(req.params.id);
+      if (!event) {
+        return res.status(404).json({ success: false, message: 'Event not found' });
+      }
+
+      // Cleanup dependent documents
+      await Promise.all([
+        Ticket.deleteMany({ event: event._id }),
+        Booking.deleteMany({ event: event._id }),
+        Wishlist.deleteMany({ event: event._id }),
+        Review.deleteMany({ event: event._id }),
+      ]);
+
+      await Event.deleteOne({ _id: event._id });
+
+      res.status(200).json({ success: true, message: 'Event deleted successfully' });
+    } catch (error) {
+      next(error);
+    }
+  },
 };

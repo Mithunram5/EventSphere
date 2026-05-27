@@ -31,6 +31,12 @@ const OrganiserDashboard = () => {
   const videoRef = useRef(null);
   const [scannedTicketsList, setScannedTicketsList] = useState([]);
   const [selectedScanEvent, setSelectedScanEvent] = useState('');
+  const [qrScanStatus, setQrScanStatus] = useState('ready'); // ready | scanning | unsupported | error
+  const [qrLastDetected, setQrLastDetected] = useState('');
+  const qrScanIntervalRef = useRef(null);
+  const qrDetectorRef = useRef(null);
+  const qrLastScannedCodeRef = useRef(null);
+  const qrLastScanAtRef = useRef(0);
   
   // Roster lists
   const [rosterTickets, setRosterTickets] = useState([]);
@@ -39,6 +45,12 @@ const OrganiserDashboard = () => {
   // Manual Check-in code
   const [checkInCode, setCheckInCode] = useState('');
   const [checkingIn, setCheckingIn] = useState(false);
+
+  // Attendee communications (pre/post event ops)
+  const [announcementEventId, setAnnouncementEventId] = useState('');
+  const [announcementTitle, setAnnouncementTitle] = useState('');
+  const [announcementMessage, setAnnouncementMessage] = useState('');
+  const [announcementSending, setAnnouncementSending] = useState(false);
 
   // AI Description states
   const [aiBulletPoints, setAiBulletPoints] = useState('');
@@ -114,6 +126,71 @@ const OrganiserDashboard = () => {
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  useEffect(() => {
+    if (!announcementEventId && events.length > 0) {
+      setAnnouncementEventId(events[0]._id);
+    }
+  }, [events, announcementEventId]);
+
+  const handleSendAnnouncement = async (templateKey) => {
+    const targetEventId = announcementEventId || selectedEventForRoster?._id || events[0]?._id;
+    if (!targetEventId) {
+      toast.error('Create/publish an event first.');
+      return;
+    }
+
+    const templates = {
+      custom: null,
+      reminder: {
+        title: 'Event reminder',
+        message: 'Friendly reminder: your event is coming up soon. Please keep your QR entry pass ready in your Ticket Dashboard.',
+      },
+      checkin: {
+        title: 'Check-in instructions',
+        message: 'Check-in opens at the venue entrance desk. Please show your QR entry pass (or ticket code) for verification.',
+      },
+      feedback: {
+        title: 'We would love your feedback',
+        message: 'Thank you for attending. Please open your Ticket Dashboard and submit a quick rating and feedback to help us improve future events.',
+      },
+    };
+
+    let payloadTitle = announcementTitle;
+    let payloadMessage = announcementMessage;
+
+    if (templateKey && templates[templateKey]) {
+      payloadTitle = templates[templateKey].title;
+      payloadMessage = templates[templateKey].message;
+      setAnnouncementTitle(payloadTitle);
+      setAnnouncementMessage(payloadMessage);
+    }
+
+    if (!payloadTitle.trim() || !payloadMessage.trim()) {
+      toast.error('Please enter an announcement title and message.');
+      return;
+    }
+
+    setAnnouncementSending(true);
+    toast.loading('Sending announcement...', { id: 'send-announce' });
+    try {
+      const res = await api.post(`/notifications/event/${targetEventId}/broadcast`, {
+        title: payloadTitle,
+        message: payloadMessage,
+      });
+      if (res.data.success) {
+        toast.success(`Sent to ${res.data.count} attendee(s).`, { id: 'send-announce' });
+        setAnnouncementTitle('');
+        setAnnouncementMessage('');
+      } else {
+        toast.error('Failed to send announcement.', { id: 'send-announce' });
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to send announcement.', { id: 'send-announce' });
+    } finally {
+      setAnnouncementSending(false);
+    }
+  };
 
   const calculateStats = async (myEvents) => {
     try {
@@ -268,44 +345,77 @@ const OrganiserDashboard = () => {
     }
   };
 
-  // Manual Check-in Submit
-  const handleCheckInSubmit = async (e) => {
-    if (e) e.preventDefault();
-    if (!checkInCode.trim()) {
+  // Shared check-in logic (manual + QR camera)
+  const performCheckIn = async (code, refreshEventId) => {
+    const trimmed = (code || '').trim();
+    if (!trimmed) {
       toast.error('Please enter a ticket code!');
-      return;
+      return { success: false };
     }
 
+    if (checkingIn) return { success: false };
+
+    toast.loading('Verifying entry pass...', { id: 'checkin-loading' });
     setCheckingIn(true);
+    setQrLastDetected(trimmed);
+
     try {
-      const res = await api.post('/bookings/check-in', { ticketCode: checkInCode });
+      const res = await api.post('/bookings/check-in', { ticketCode: trimmed });
       if (res.data.success) {
-        toast.success(`Success! Attendee checked-in. Code: ${res.data.ticket.ticketCode}`);
-        setCheckInCode('');
-        
-        // Refresh roster if currently viewable
-        if (selectedEventForRoster) {
-          const rosterRes = await api.get(`/bookings/event/${selectedEventForRoster._id}/attendees`);
+        toast.dismiss('checkin-loading');
+        const ticketCode = res.data.ticket?.ticketCode || trimmed;
+        toast.success(`Entry verified — checked in: ${ticketCode}`);
+
+        // Remove from local QR scan list (if scanner modal is open)
+        setScannedTicketsList((prev) => prev.filter((t) => t.ticketCode !== ticketCode));
+
+        // Refresh roster (if the organiser is viewing it)
+        if (refreshEventId) {
+          const rosterRes = await api.get(`/bookings/event/${refreshEventId}/attendees`);
           if (rosterRes.data.success) {
             setRosterTickets(rosterRes.data.tickets);
           }
         }
+
         fetchDashboardData(); // update statistics counts
         return { success: true };
       }
+
+      toast.dismiss('checkin-loading');
+      toast.error('Check-in failed.');
+      return { success: false };
     } catch (error) {
+      toast.dismiss('checkin-loading');
       const msg = error.response?.data?.message || 'Check-in validation failed.';
       toast.error(msg);
       return { success: false };
     } finally {
       setCheckingIn(false);
+      setCheckInCode('');
+      setQrLastDetected('');
     }
+  };
+
+  // Manual Check-in Submit
+  const handleCheckInSubmit = async (e) => {
+    if (e) e.preventDefault();
+    await performCheckIn(checkInCode, selectedEventForRoster?._id);
   };
 
   // Open QR Camera Scanner
   const startCameraScanner = async (eventId = '') => {
     setQrScannerOpen(true);
     setSelectedScanEvent(eventId || (events[0]?._id || ''));
+    setQrScanStatus('ready');
+    setQrLastDetected('');
+    qrLastScannedCodeRef.current = null;
+    qrLastScanAtRef.current = 0;
+
+    // Cleanup any previous scan interval
+    if (qrScanIntervalRef.current) {
+      clearInterval(qrScanIntervalRef.current);
+      qrScanIntervalRef.current = null;
+    }
     
     // Fetch unscanned tickets list to let organisers easily select one to simulate camera detection
     try {
@@ -322,56 +432,107 @@ const OrganiserDashboard = () => {
 
     // Initialize actual camera stream to make it real-world production-quality
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      setCameraStream(stream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+      // If the camera is already running, avoid re-requesting permission.
+      if (videoRef.current?.srcObject) {
+        setCameraStream(videoRef.current.srcObject);
+        setQrScanStatus('scanning');
+      } else {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        setCameraStream(stream);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+        setQrScanStatus('scanning');
       }
     } catch (err) {
-      console.log('Webcam permission denied or unavailable. Operating inside immersive simulated finder mode.');
+      console.log('Webcam permission denied or unavailable.');
+      setQrScanStatus('permission-denied');
     }
   };
 
   // Stop QR Camera Scanner
   const stopCameraScanner = () => {
+    if (qrScanIntervalRef.current) {
+      clearInterval(qrScanIntervalRef.current);
+      qrScanIntervalRef.current = null;
+    }
+    qrDetectorRef.current = null;
     if (cameraStream) {
       cameraStream.getTracks().forEach(track => track.stop());
       setCameraStream(null);
     }
+    setQrScanStatus('ready');
+    setQrLastDetected('');
     setQrScannerOpen(false);
   };
 
+  // QR decoding loop (uses BarcodeDetector when available)
+  useEffect(() => {
+    const run = async () => {
+      if (!qrScannerOpen) return;
+      if (!cameraStream) return;
+      if (!videoRef.current) return;
+
+      const BarcodeDetectorCtor = window.BarcodeDetector;
+      if (!BarcodeDetectorCtor) {
+        setQrScanStatus('unsupported');
+        return;
+      }
+
+      try {
+        const detector = new BarcodeDetectorCtor({ formats: ['qr_code'] });
+        qrDetectorRef.current = detector;
+        setQrScanStatus('scanning');
+      } catch (e) {
+        setQrScanStatus('unsupported');
+        return;
+      }
+
+      const detector = qrDetectorRef.current;
+      if (!detector) return;
+
+      // Simple cooldown to avoid repeated scans
+      qrLastScanAtRef.current = 0;
+
+      qrScanIntervalRef.current = setInterval(async () => {
+        if (!qrScannerOpen) return;
+        if (checkingIn) return;
+        if (!videoRef.current) return;
+        if (qrLastScannedCodeRef.current && Date.now() - qrLastScanAtRef.current < 1800) return;
+
+        try {
+          const codes = await detector.detect(videoRef.current);
+          if (!codes || codes.length === 0) return;
+
+          const code = codes[0]?.rawValue;
+          if (!code) return;
+          if (code === qrLastScannedCodeRef.current) return;
+
+          qrLastScannedCodeRef.current = code;
+          qrLastScanAtRef.current = Date.now();
+          setQrLastDetected(code);
+
+          // Refresh roster for selected scan event
+          await performCheckIn(code, selectedScanEvent);
+        } catch (err) {
+          setQrScanStatus('error');
+        }
+      }, 450);
+    };
+
+    run();
+
+    return () => {
+      if (qrScanIntervalRef.current) {
+        clearInterval(qrScanIntervalRef.current);
+        qrScanIntervalRef.current = null;
+      }
+    };
+  }, [qrScannerOpen, cameraStream, selectedScanEvent, checkingIn]);
+
   // Trigger scanning detection
   const triggerSimulatedScan = async (code) => {
-    setCheckInCode(code);
-    toast.loading('Analyzing entry pass barcode...', { id: 'scan-detect', duration: 1000 });
-    
-    setTimeout(async () => {
-      setCheckingIn(true);
-      try {
-        const res = await api.post('/bookings/check-in', { ticketCode: code });
-        if (res.data.success) {
-          toast.success(`Access Granted! ticket validated: ${code}`, { id: 'scan-detect' });
-          setCheckInCode('');
-          
-          // Remove from local scan list
-          setScannedTicketsList(prev => prev.filter(t => t.ticketCode !== code));
-          
-          if (selectedEventForRoster) {
-            const rosterRes = await api.get(`/bookings/event/${selectedEventForRoster._id}/attendees`);
-            if (rosterRes.data.success) {
-              setRosterTickets(rosterRes.data.tickets);
-            }
-          }
-          fetchDashboardData();
-        }
-      } catch (err) {
-        toast.error(err.response?.data?.message || 'Invalid scanning credential.', { id: 'scan-detect' });
-      } finally {
-        setCheckingIn(false);
-        setCheckInCode('');
-      }
-    }, 1000);
+    await performCheckIn(code, selectedScanEvent);
   };
 
   // Process refund (approve/reject)
@@ -620,6 +781,30 @@ const OrganiserDashboard = () => {
                 <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold mt-0.5">Input ticket barcodes for verification</p>
               </div>
 
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const eventId = selectedEventForRoster?._id || events[0]?._id;
+                    if (!eventId) {
+                      toast.error('Create/publish an event first to enable check-ins.');
+                      return;
+                    }
+                    startCameraScanner(eventId);
+                  }}
+                  disabled={checkingIn}
+                  className="gradient-btn w-full rounded-xl py-3 text-xs font-bold shadow flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h6M3 17h6M14 7h7M14 17h7M8 7l-2 2 2 2M16 7l2 2-2 2M8 17l-2-2 2-2M16 17l2-2-2-2" />
+                  </svg>
+                  Scan QR with Camera
+                </button>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed font-semibold">
+                  If camera scanning isn&apos;t supported, use manual entry below or open the scanner&apos;s ticket list fallback.
+                </p>
+              </div>
+
               <form onSubmit={handleCheckInSubmit} className="space-y-3">
                 <input
                   type="text"
@@ -645,6 +830,92 @@ const OrganiserDashboard = () => {
                   )}
                 </button>
               </form>
+            </div>
+
+            {/* Attendee Communications */}
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4 transition-colors duration-200">
+              <div>
+                <h3 className="text-md font-bold text-slate-800 dark:text-white">Attendee Communications</h3>
+                <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold mt-0.5">
+                  Send pre-event updates and post-event follow-ups.
+                </p>
+              </div>
+
+              {events.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-950/30 p-4 text-center">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                    Publish an event to message attendees.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <select
+                    value={announcementEventId}
+                    onChange={(e) => setAnnouncementEventId(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2.5 text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    {events.map((ev) => (
+                      <option key={ev._id} value={ev._id}>
+                        {ev.title}
+                      </option>
+                    ))}
+                  </select>
+
+                  <input
+                    type="text"
+                    value={announcementTitle}
+                    onChange={(e) => setAnnouncementTitle(e.target.value)}
+                    placeholder="Announcement title"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                  <textarea
+                    rows={3}
+                    value={announcementMessage}
+                    onChange={(e) => setAnnouncementMessage(e.target.value)}
+                    placeholder="Write an update for your attendees..."
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      disabled={announcementSending}
+                      onClick={() => handleSendAnnouncement('reminder')}
+                      className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 px-3 py-2 text-[11px] font-bold text-slate-700 dark:text-slate-200 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-300 transition-all disabled:opacity-40"
+                    >
+                      Quick: Reminder
+                    </button>
+                    <button
+                      type="button"
+                      disabled={announcementSending}
+                      onClick={() => handleSendAnnouncement('checkin')}
+                      className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 px-3 py-2 text-[11px] font-bold text-slate-700 dark:text-slate-200 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-300 transition-all disabled:opacity-40"
+                    >
+                      Quick: Check-in
+                    </button>
+                    <button
+                      type="button"
+                      disabled={announcementSending}
+                      onClick={() => handleSendAnnouncement('feedback')}
+                      className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/20 px-3 py-2 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 hover:border-emerald-300 transition-all disabled:opacity-40"
+                    >
+                      Post-event: Feedback
+                    </button>
+                    <button
+                      type="button"
+                      disabled={announcementSending}
+                      onClick={() => handleSendAnnouncement('custom')}
+                      className="gradient-btn rounded-xl px-3 py-2 text-[11px] font-bold shadow disabled:opacity-40"
+                    >
+                      Send Now
+                    </button>
+                  </div>
+
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed font-semibold">
+                    Messages appear as in-app notifications in the attendee navbar and dashboard.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Payout Settlement Simulation Panel */}
@@ -1043,6 +1314,147 @@ const OrganiserDashboard = () => {
               ))}
             </div>
           )}
+        </div>
+      </Modal>
+
+      {/* Modal 3: QR Camera Scanner */}
+      <Modal
+        isOpen={qrScannerOpen}
+        onClose={stopCameraScanner}
+        title="QR Entry Scan"
+      >
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <p className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
+              Event context
+            </p>
+            <select
+              value={selectedScanEvent}
+              onChange={(e) => startCameraScanner(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2.5 text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              {events.map((ev) => (
+                <option key={ev._id} value={ev._id}>
+                  {ev.title}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div
+            className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-950 overflow-hidden relative"
+          >
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              className="w-full aspect-video object-cover"
+            />
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+              <div className="w-2/3 h-1/2 rounded-xl border-2 border-brand-400 bg-brand-500/10" />
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs">
+            <p className="text-slate-500 dark:text-slate-400">
+              Status:{" "}
+              <span className="font-bold text-slate-800 dark:text-white">
+                {qrScanStatus}
+              </span>
+              {qrLastDetected && (
+                <>
+                  {" "}
+                  • Detected:{" "}
+                  <span className="font-mono text-brand-600 dark:text-brand-400 font-bold">
+                    {qrLastDetected}
+                  </span>
+                </>
+              )}
+            </p>
+            <p className="text-slate-500 dark:text-slate-400">
+              Point the camera at the attendee&apos;s QR entry pass.
+            </p>
+          </div>
+
+          {qrScanStatus === 'unsupported' && (
+            <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20 p-3 text-xs space-y-1">
+              <p className="font-bold text-amber-700 dark:text-amber-300">QR camera scanning isn&apos;t available</p>
+              <p className="text-slate-600 dark:text-slate-300">
+                Use manual ticket code verification below, or tap a ticket from the unscanned list.
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <p className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
+              Manual verify (fallback)
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Paste ticket code"
+                value={checkInCode}
+                onChange={(e) => setCheckInCode(e.target.value)}
+                className="flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-sm text-slate-800 dark:text-white placeholder-slate-400 font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+              <button
+                type="button"
+                disabled={checkingIn || !checkInCode.trim()}
+                onClick={() => performCheckIn(checkInCode, selectedScanEvent)}
+                className="gradient-btn rounded-xl px-4 py-3 text-xs font-bold shadow flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Verify
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
+                Quick pick (unscanned)
+              </p>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-50 text-brand-600 dark:bg-brand-950/40 dark:text-brand-400">
+                {scannedTicketsList.length} remaining
+              </span>
+            </div>
+            <div className="max-h-56 overflow-y-auto pr-1 space-y-2">
+              {scannedTicketsList.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/40 p-4 text-center">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                    No unscanned tickets found for this event.
+                  </p>
+                </div>
+              ) : (
+                scannedTicketsList.slice(0, 30).map((ticket) => (
+                  <button
+                    key={ticket._id}
+                    type="button"
+                    disabled={checkingIn}
+                    onClick={() => triggerSimulatedScan(ticket.ticketCode)}
+                    className="w-full text-left rounded-xl border border-slate-100 dark:border-slate-800/40 bg-slate-50/50 dark:bg-slate-900/40 hover:border-brand-300 dark:hover:border-brand-600 hover:bg-slate-50 dark:hover:bg-slate-900/60 p-3 flex flex-col gap-0.5"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[11px] font-bold text-slate-800 dark:text-white">
+                        {ticket.user?.name || 'Attendee'}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-brand-600 dark:text-brand-400">
+                        {ticket.ticketType}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate">
+                      {ticket.ticketCode}
+                    </span>
+                  </button>
+                ))
+              )}
+              {scannedTicketsList.length > 30 && (
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold text-center">
+                  Showing first 30 entries. Use manual entry for the rest.
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       </Modal>
     </div>

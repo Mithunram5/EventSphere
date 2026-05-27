@@ -374,6 +374,87 @@ const EventDetails = () => {
             </div>
           )}
 
+          {/* Venue Map + FAQs */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4 transition-colors duration-200">
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white">Venue & FAQs</h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Location details, entry guidance, and quick answers.
+                </p>
+              </div>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${event.venue}, ${event.city}`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-bold px-4 py-2 rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-950/40 dark:text-brand-400 border border-slate-200 dark:border-slate-800 hover:bg-brand-100 dark:hover:bg-brand-950/60 transition-colors"
+              >
+                Open in Maps
+              </a>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <p className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
+                  Venue
+                </p>
+                <p className="text-sm font-bold text-slate-800 dark:text-white leading-relaxed">
+                  {event.venue}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                  {event.city}
+                </p>
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3">
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold">
+                    Entry checklist: show your QR ticket code at the desk (on-screen or printed).
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
+                  FAQ
+                </p>
+
+                <details className="group rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3">
+                  <summary className="cursor-pointer text-xs font-bold text-slate-800 dark:text-white">
+                    Where do I check in?
+                  </summary>
+                  <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                    Use the organiser’s check-in desk on event day. Your QR entry pass is verified against ticket codes.
+                  </p>
+                </details>
+
+                <details className="group rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3">
+                  <summary className="cursor-pointer text-xs font-bold text-slate-800 dark:text-white">
+                    Do I need to print the ticket?
+                  </summary>
+                  <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                    No. Display your QR code from your Ticket Dashboard. A screen is sufficient for verification.
+                  </p>
+                </details>
+
+                <details className="group rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3">
+                  <summary className="cursor-pointer text-xs font-bold text-slate-800 dark:text-white">
+                    What if I lost my QR code?
+                  </summary>
+                  <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                    Open the Ticket Dashboard for your pass and show the QR entry code again. You can also copy the ticket code.
+                  </p>
+                </details>
+
+                <details className="group rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3">
+                  <summary className="cursor-pointer text-xs font-bold text-slate-800 dark:text-white">
+                    Can I request a refund?
+                  </summary>
+                  <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                    Refund requests are available from the Ticket Dashboard for eligible tickets. Once checked in, refunds are not allowed.
+                  </p>
+                </details>
+              </div>
+            </div>
+          </div>
+
           {/* Attendee Networking Section */}
           {user && (hasBoughtTicket || (event.organiser?._id === user._id || user.role === 'admin')) && (
             <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4 transition-colors duration-200">

@@ -5,6 +5,8 @@ const {
   getAllUsers,
   updateUserRole,
   deleteUser,
+  getAllEventsAdmin,
+  deleteEventAdmin,
 } = require('../controllers/adminController');
 const { protect } = require('../middleware/authMiddleware');
 const { authorize } = require('../middleware/roleMiddleware');
@@ -17,5 +19,7 @@ router.get('/stats', getPlatformStats);
 router.get('/users', getAllUsers);
 router.put('/users/:id/role', updateUserRole);
 router.delete('/users/:id', deleteUser);
+router.get('/events', getAllEventsAdmin);
+router.delete('/events/:id', deleteEventAdmin);
 
 module.exports = router;

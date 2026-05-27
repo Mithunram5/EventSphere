@@ -158,6 +158,39 @@ const TicketDashboard = () => {
     printWindow.document.close();
   };
 
+  const handleCopyTicketCode = async () => {
+    if (!selectedTicketForQR) return;
+    try {
+      await navigator.clipboard.writeText(selectedTicketForQR.ticketCode);
+      toast.success('Ticket code copied.');
+    } catch {
+      toast.error('Could not copy ticket code.');
+    }
+  };
+
+  const handleDownloadQR = () => {
+    if (!selectedTicketForQR) return;
+    const svgEl = document.getElementById(`qr-svg-${selectedTicketForQR._id}`);
+    if (!svgEl) {
+      toast.error('QR not available for download.');
+      return;
+    }
+
+    const svgContent = svgEl.outerHTML;
+    const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `QR_${selectedTicketForQR.ticketCode}.svg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    URL.revokeObjectURL(url);
+    toast.success('QR downloaded.');
+  };
+
   // AI smart schedule builder
   const handleLoadAISchedule = async (eventObj) => {
     setSelectedEventForAI(eventObj);
@@ -357,6 +390,23 @@ const TicketDashboard = () => {
                 level="H"
                 includeMargin={false}
               />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopyTicketCode}
+                className="text-xs font-semibold px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-950/30 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
+              >
+                Copy code
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadQR}
+                className="text-xs font-semibold px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white shadow-sm transition-colors"
+              >
+                Download QR
+              </button>
             </div>
 
             <div className="space-y-1">

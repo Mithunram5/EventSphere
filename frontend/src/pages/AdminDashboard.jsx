@@ -6,11 +6,15 @@ import { StatsSkeleton } from '../components/common/LoadingSkeleton';
 import api from '../utils/api';
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('analytics'); // analytics, users
+  const [activeTab, setActiveTab] = useState('analytics'); // analytics, users, events
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [usersLoading, setUsersLoading] = useState(false);
+  const [emailSearch, setEmailSearch] = useState('');
+  const [events, setEvents] = useState([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventSearch, setEventSearch] = useState('');
 
   const fetchAdminStats = async () => {
     try {
@@ -51,6 +55,42 @@ const AdminDashboard = () => {
     }
   }, [activeTab]);
 
+  const fetchEventsForModeration = async () => {
+    try {
+      setEventsLoading(true);
+      const qp = new URLSearchParams();
+      if (eventSearch.trim()) qp.append('search', eventSearch.trim());
+      const res = await api.get(`/admin/events?${qp.toString()}`);
+      if (res.data.success) {
+        setEvents(res.data.events);
+      }
+    } catch (err) {
+      toast.error('Failed to load event listings.');
+    } finally {
+      setEventsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'events') {
+      fetchEventsForModeration();
+    }
+  }, [activeTab]);
+
+  const handleDeleteEventAdmin = async (eventId) => {
+    if (!window.confirm('Delete this event? This will remove its tickets, bookings, wishlists, and reviews.')) return;
+    try {
+      const res = await api.delete(`/admin/events/${eventId}`);
+      if (res.data.success) {
+        toast.success('Event deleted.');
+        fetchEventsForModeration();
+        fetchAdminStats();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete event.');
+    }
+  };
+
   const handleRoleChange = async (userId, newRole) => {
     try {
       const res = await api.put(`/admin/users/${userId}/role`, { role: newRole });
@@ -79,6 +119,39 @@ const AdminDashboard = () => {
       const msg = err.response?.data?.message || 'Delete operation failed.';
       toast.error(msg);
     }
+  };
+
+  const filteredUsers = users.filter((u) => {
+    if (!emailSearch.trim()) return true;
+    return (u.email || '').toLowerCase().includes(emailSearch.trim().toLowerCase());
+  });
+
+  const handleExportUsersCsv = () => {
+    if (filteredUsers.length === 0) {
+      toast.error('No matching users to export.');
+      return;
+    }
+
+    const headers = ['Name', 'Email', 'Role', 'CreatedAt'];
+    const rows = filteredUsers.map((u) => [
+      u.name || '',
+      u.email || '',
+      u.role || '',
+      u.createdAt ? new Date(u.createdAt).toLocaleString() : '',
+    ]);
+
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      [headers.join(','), ...rows.map((r) => r.map((cell) => `"${cell}"`).join(','))].join('\n');
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Users_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Users CSV exported.');
   };
 
   return (
@@ -116,6 +189,19 @@ const AdminDashboard = () => {
         >
           User Moderation Desk
           {activeTab === 'users' && (
+            <span className="absolute bottom-0 left-0 w-full h-0.5 bg-brand-500 rounded-full" />
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('events')}
+          className={`pb-4 text-sm font-bold transition-all relative ${
+            activeTab === 'events'
+              ? 'text-brand-500'
+              : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+          }`}
+        >
+          Event Moderation
+          {activeTab === 'events' && (
             <span className="absolute bottom-0 left-0 w-full h-0.5 bg-brand-500 rounded-full" />
           )}
         </button>
@@ -215,7 +301,27 @@ const AdminDashboard = () => {
               <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">Loading users registry...</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="space-y-4">
+              <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+                <div className="w-full md:max-w-md">
+                  <input
+                    type="text"
+                    value={emailSearch}
+                    onChange={(e) => setEmailSearch(e.target.value)}
+                    placeholder="Search by email..."
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleExportUsersCsv}
+                  className="text-xs font-bold px-3.5 py-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl shadow-sm flex items-center gap-1.5"
+                >
+                  📥 Export CSV
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-450 dark:text-slate-500 font-bold uppercase tracking-wider">
@@ -227,7 +333,7 @@ const AdminDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((item) => (
+                  {filteredUsers.map((item) => (
                     <tr key={item._id} className="border-b border-slate-100 dark:border-slate-800/40 hover:bg-slate-50/40 dark:hover:bg-slate-850/40 transition-colors">
                       <td className="py-4 px-2 font-bold text-slate-800 dark:text-slate-200">{item.name}</td>
                       <td className="py-4 px-2 text-slate-500 dark:text-slate-400">{item.email}</td>
@@ -266,6 +372,112 @@ const AdminDashboard = () => {
                             Ban / Delete
                           </button>
                         </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+              {filteredUsers.length === 0 && (
+                <div className="text-center py-10">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    No users match your search.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab Contents: Events */}
+      {activeTab === 'events' && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm transition-colors duration-200 space-y-4">
+          <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+            <div>
+              <h3 className="text-md font-bold text-slate-850 dark:text-white">Event Listings Moderation</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Review all events, search by keywords, and remove listings that violate policy.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={fetchEventsForModeration}
+              className="text-xs font-bold px-3.5 py-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl shadow-sm"
+            >
+              Refresh
+            </button>
+          </div>
+
+          <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+            <input
+              type="text"
+              value={eventSearch}
+              onChange={(e) => setEventSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') fetchEventsForModeration();
+              }}
+              placeholder="Search events by title, venue or description..."
+              className="w-full md:max-w-xl rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+            <button
+              type="button"
+              onClick={fetchEventsForModeration}
+              className="gradient-btn rounded-xl px-4 py-3 text-xs font-bold shadow"
+            >
+              Search
+            </button>
+          </div>
+
+          {eventsLoading ? (
+            <div className="flex flex-col items-center gap-4 py-12 animate-pulse">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent"></div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">Loading events...</p>
+            </div>
+          ) : events.length === 0 ? (
+            <div className="text-center py-10">
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                No events found.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-450 dark:text-slate-500 font-bold uppercase tracking-wider">
+                    <th className="py-3 px-2">Title</th>
+                    <th className="py-3 px-2">Category</th>
+                    <th className="py-3 px-2">City</th>
+                    <th className="py-3 px-2">Date</th>
+                    <th className="py-3 px-2">Organiser</th>
+                    <th className="py-3 px-2 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.map((ev) => (
+                    <tr
+                      key={ev._id}
+                      className="border-b border-slate-100 dark:border-slate-800/40 hover:bg-slate-50/40 dark:hover:bg-slate-850/40 transition-colors"
+                    >
+                      <td className="py-4 px-2 font-bold text-slate-800 dark:text-slate-200">
+                        {ev.title}
+                      </td>
+                      <td className="py-4 px-2 text-slate-500 dark:text-slate-400">{ev.category}</td>
+                      <td className="py-4 px-2 text-slate-500 dark:text-slate-400">{ev.city}</td>
+                      <td className="py-4 px-2 text-slate-500 dark:text-slate-400">
+                        {ev.dateTime ? new Date(ev.dateTime).toLocaleDateString() : '—'}
+                      </td>
+                      <td className="py-4 px-2 text-slate-500 dark:text-slate-400">
+                        {ev.organiser?.email || '—'}
+                      </td>
+                      <td className="py-4 px-2 text-right">
+                        <button
+                          onClick={() => handleDeleteEventAdmin(ev._id)}
+                          className="text-[10px] font-bold text-red-600 dark:text-red-400 hover:underline"
+                        >
+                          Delete
+                        </button>
                       </td>
                     </tr>
                   ))}

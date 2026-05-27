@@ -135,7 +135,7 @@ const Home = () => {
             transition={{ delay: 0.2, duration: 0.5 }}
             className="mx-auto max-w-2xl text-slate-300 text-md sm:text-lg font-medium"
           >
-            EventSphere is the premier end-to-end management and ticketing platform for attendees, organisers, and tech hackathons.
+            EventSphere is the premier end-to-end management and ticketing platform for attendees, organisers, and modern technology conferences.
           </motion.p>
 
           {/* Search Bar Form */}

@@ -23,7 +23,7 @@ const createReview = async (req, res, next) => {
       status: { $in: ['active', 'checked_in'] }
     });
 
-    // In a real-world scenario we enforce buying tickets, but during testing/hackathon we can allow review if they bought a ticket
+    // In production, we enforce ticket ownership before allowing reviews.
     if (!ticketBought) {
       return res.status(400).json({
         success: false,
