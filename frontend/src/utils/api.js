@@ -1,7 +1,14 @@
 import axios from 'axios';
 
 // Get API base URL from environment or fallback to localhost
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const rawBase = (import.meta.env.VITE_API_URL || '').trim();
+const normalizedBase = rawBase.replace(/\/+$/, ''); // remove trailing slashes
+// Allow either:
+// - VITE_API_URL=https://<render-app>.onrender.com
+// - VITE_API_URL=https://<render-app>.onrender.com/api
+const API_URL = normalizedBase
+  ? (normalizedBase.endsWith('/api') ? normalizedBase : `${normalizedBase}/api`)
+  : 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: API_URL,
